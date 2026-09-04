@@ -28,4 +28,3 @@ com evidências e comunicação por e-mail.
 Frontend: http://localhost:5173  
 Documentação da API: http://localhost:8000/docs
 
-
