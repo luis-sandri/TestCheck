@@ -1,7 +1,10 @@
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from .config import get_settings
+from .database import get_db
 
 
 settings = get_settings()
@@ -24,6 +27,13 @@ app.add_middleware(
 @app.get("/health", tags=["Sistema"])
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": settings.app_name}
+
+
+@app.get("/database/health", tags=["Sistema"])
+def database_health_check(db: Session = Depends(get_db)) -> dict[str, str]:
+    """Verifica se a API consegue se comunicar com o PostgreSQL configurado."""
+    db.execute(text("SELECT 1"))
+    return {"status": "ok", "database": "connected"}
 
 
 @app.get("/dashboard", tags=["Dashboard"])

@@ -20,13 +20,33 @@ com evidências e comunicação por e-mail.
 
 1. Copie `.env.example` para `.env`.
 2. Inicie o PostgreSQL com `docker compose up -d`.
-3. No diretório `backend`, crie um ambiente virtual e instale
-   `requirements.txt`.
-4. Inicie a API com `uvicorn app.main:app --reload`.
-5. No diretório `frontend`, execute `npm install` e `npm run dev`.
+3. No diretório `backend`, crie um ambiente virtual e instale `requirements.txt`.
+4. Ainda em `backend`, aplique a estrutura do banco com `alembic upgrade head`.
+5. Inicie a API com `uvicorn app.main:app --reload`.
+6. No diretório `frontend`, execute `npm install` e `npm run dev`.
 
 Frontend: http://localhost:5173  
 Documentação da API: http://localhost:8000/docs
+
+## Banco de dados
+
+O schema inicial possui as entidades necessárias para o fluxo do MVP:
+
+- usuários e seus papéis;
+- casos de teste;
+- auditorias e itens de checklist;
+- não conformidades;
+- evidências enviadas pelo responsável.
+
+As alterações de estrutura são controladas pelo Alembic. Para criar uma nova
+migração após alterar os modelos, execute em `backend`:
+
+```bash
+alembic revision --autogenerate -m "descricao da alteracao"
+alembic upgrade head
+```
+
+A rota `GET /database/health` confirma se a API consegue acessar o banco.
 
 ## Publicação na Vercel
 
@@ -37,3 +57,7 @@ O arquivo `vercel.json` declara dois serviços no mesmo domínio:
 
 Na Vercel, o projeto deve usar o preset **Services**. A rota pública de
 verificação da API será `/api/health`.
+
+Para persistir dados em produção, configure a variável `DATABASE_URL` no
+projeto da Vercel com a URL de um PostgreSQL gerenciado e execute a migração
+contra esse banco antes de usar o sistema.
