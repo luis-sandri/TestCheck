@@ -28,3 +28,12 @@ com evidências e comunicação por e-mail.
 Frontend: http://localhost:5173  
 Documentação da API: http://localhost:8000/docs
 
+## Publicação na Vercel
+
+O arquivo `vercel.json` declara dois serviços no mesmo domínio:
+
+- `/`: frontend React e Vite;
+- `/api`: backend FastAPI.
+
+Na Vercel, o projeto deve usar o preset **Services**. A rota pública de
+verificação da API será `/api/health`.

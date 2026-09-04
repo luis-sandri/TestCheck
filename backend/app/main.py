@@ -21,12 +21,12 @@ app.add_middleware(
 )
 
 
-@app.get("/api/health", tags=["Sistema"])
+@app.get("/health", tags=["Sistema"])
 def health_check() -> dict[str, str]:
     return {"status": "ok", "service": settings.app_name}
 
 
-@app.get("/api/dashboard", tags=["Dashboard"])
+@app.get("/dashboard", tags=["Dashboard"])
 def dashboard_summary() -> dict[str, object]:
     """Dados demonstrativos até a persistência das auditorias ser implementada."""
     return {
@@ -60,4 +60,3 @@ def dashboard_summary() -> dict[str, object]:
             },
         ],
     }
-

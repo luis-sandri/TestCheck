@@ -1,0 +1,15 @@
+[project]
+name = "testcheck-backend"
+version = "0.1.0"
+description = "API FastAPI para auditoria de casos de teste"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.115,<1.0",
+    "sqlalchemy>=2.0,<3.0",
+    "psycopg[binary]>=3.2,<4.0",
+    "alembic>=1.14,<2.0",
+    "pydantic-settings>=2.7,<3.0",
+    "python-multipart>=0.0.20,<1.0",
+    "argon2-cffi>=23.1,<26.0",
+]
+
