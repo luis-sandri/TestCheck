@@ -6,6 +6,7 @@ from .config import get_settings
 from .database import Base, engine
 from . import models  # noqa: F401 - registra as tabelas do schema inicial
 from .auth import router as auth_router
+from .test_cases import router as test_case_router
 
 
 settings = get_settings()
@@ -24,6 +25,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth_router)
+app.include_router(test_case_router)
 
 
 def ensure_database_ready() -> None:
