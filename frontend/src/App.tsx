@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent } from 'react'
+import type { FormEvent, KeyboardEvent } from 'react'
 import './App.css'
 
 type ApiStatus = 'checking' | 'online' | 'offline'
@@ -94,6 +94,30 @@ function TestCasesPage({ apiStatus, user, onBack, onLogout }: { apiStatus: ApiSt
 
   useEffect(() => { void loadCases() }, [])
   const setField = (field: keyof TestCaseForm, value: string) => setForm((current) => ({ ...current, [field]: value }))
+  const nextStepNumber = (steps: string) => {
+    const numbers = [...steps.matchAll(/(?:^|\n)\s*(\d+)\.\s/g)].map((match) => Number(match[1]))
+    return Math.max(0, ...numbers) + 1
+  }
+  const startSteps = () => {
+    if (!form.steps.trim()) setField('steps', '1. ')
+  }
+  const addStep = () => {
+    setForm((current) => {
+      const steps = current.steps.trimEnd()
+      return { ...current, steps: steps ? `${steps}\n${nextStepNumber(steps)}. ` : '1. ' }
+    })
+  }
+  const handleStepKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey) return
+    event.preventDefault()
+    const target = event.currentTarget
+    const position = target.selectionStart
+    const before = target.value.slice(0, position)
+    const after = target.value.slice(target.selectionEnd)
+    const insertion = `\n${nextStepNumber(before)}. `
+    setField('steps', `${before}${insertion}${after}`)
+    window.requestAnimationFrame(() => target.setSelectionRange(position + insertion.length, position + insertion.length))
+  }
   const edit = (testCase: TestCaseData) => {
     const { id, code, author_name, ...values } = testCase
     setEditingId(id)
@@ -131,7 +155,7 @@ function TestCasesPage({ apiStatus, user, onBack, onLogout }: { apiStatus: ApiSt
     <header className="topbar"><div><p className="eyebrow">ARTEFATOS DE SOFTWARE</p><h1>Casos de teste</h1><p className="subtitle">Cadastre os casos que serão avaliados pela auditoria.</p></div><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></header>
     <section className="case-workspace"><form className="panel case-form" onSubmit={save}>
       <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco poderão ser identificados na auditoria.</p></div></div>
-      <div className="form-fields"><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste<textarea value={form.steps} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela&#10;2. Informar os dados" /></label><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
+      <div className="form-fields"><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
       <div className="form-actions"><button className="text-button" type="button" onClick={reset}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
       {message && <p className="case-message" role="status">{message}</p>}
     </form>
