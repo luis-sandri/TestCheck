@@ -4,7 +4,8 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import get_db
+from .database import Base, engine, get_db
+from . import models  # noqa: F401 - registra as tabelas do schema inicial
 
 
 settings = get_settings()
@@ -31,9 +32,14 @@ def health_check() -> dict[str, str]:
 
 @app.get("/database/health", tags=["Sistema"])
 def database_health_check(db: Session = Depends(get_db)) -> dict[str, str]:
-    """Verifica se a API consegue se comunicar com o PostgreSQL configurado."""
+    """Inicializa o schema e verifica a comunicação com o PostgreSQL.
+
+    A inicialização é idempotente: não recria nem apaga tabelas já existentes.
+    As migrations do Alembic continuam sendo a referência para evoluções futuras.
+    """
+    Base.metadata.create_all(bind=engine)
     db.execute(text("SELECT 1"))
-    return {"status": "ok", "database": "connected"}
+    return {"status": "ok", "database": "connected", "schema": "ready"}
 
 
 @app.get("/dashboard", tags=["Dashboard"])

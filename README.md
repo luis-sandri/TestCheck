@@ -47,7 +47,9 @@ alembic revision --autogenerate -m "descricao da alteracao"
 alembic upgrade head
 ```
 
-A rota `GET /database/health` confirma se a API consegue acessar o banco.
+A rota `GET /database/health` cria o schema inicial quando necessário e
+confirma se a API consegue acessar o banco. A operação é segura para repetir:
+ela não exclui nem substitui dados existentes.
 
 ## Publicação na Vercel
 
