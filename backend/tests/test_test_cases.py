@@ -44,14 +44,16 @@ def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     created = client.post("/test-cases", json={"title": "Login válido", "steps": "1. Informar credenciais"})
     assert created.status_code == 201
     assert created.json()["code"] == "TC-001"
+    assert created.json()["responsible_email"] == "luis@example.com"
 
     case_id = created.json()["id"]
     updated = client.put(
         f"/test-cases/{case_id}",
-        json={"title": "Login válido", "steps": "1. Informar credenciais", "expected_result": "Acesso liberado"},
+        json={"title": "Login válido", "steps": "1. Informar credenciais", "expected_result": "Acesso liberado", "responsible_email": "andre@example.com"},
     )
     assert updated.status_code == 200
     assert updated.json()["expected_result"] == "Acesso liberado"
+    assert updated.json()["responsible_email"] == "andre@example.com"
     assert len(client.get("/test-cases").json()) == 1
     assert client.delete(f"/test-cases/{case_id}").status_code == 204
     assert client.get("/test-cases").json() == []

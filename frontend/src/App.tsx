@@ -7,13 +7,13 @@ type AuthMode = 'login' | 'register'
 type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN' }
 type TestCaseData = {
   id: string; code: string; title: string; description: string; preconditions: string; steps: string
-  test_data: string; expected_result: string; approval_criteria: string; author_name: string
+  test_data: string; expected_result: string; approval_criteria: string; author_name: string; responsible_email: string
 }
 type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'author_name'>
 
-const blankTestCase: TestCaseForm = {
-  title: '', description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
-}
+const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
+  title: '', responsible_email: responsibleEmail, description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
+})
 
 const testCases = [
   { code: 'TC-014', title: 'Login com senha incorreta', author: 'André Murilo', adherence: 67, status: 'Não conforme', tone: 'danger' },
@@ -77,7 +77,7 @@ function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAu
 
 function TestCasesPage({ apiStatus, user, onBack, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onLogout: () => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
-  const [form, setForm] = useState<TestCaseForm>(blankTestCase)
+  const [form, setForm] = useState<TestCaseForm>(() => blankTestCase(user.email))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -124,7 +124,7 @@ function TestCasesPage({ apiStatus, user, onBack, onLogout }: { apiStatus: ApiSt
     setForm(values)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-  const reset = () => { setEditingId(null); setForm(blankTestCase); setMessage('') }
+  const reset = () => { setEditingId(null); setForm(blankTestCase(user.email)); setMessage('') }
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setSaving(true)
@@ -155,12 +155,12 @@ function TestCasesPage({ apiStatus, user, onBack, onLogout }: { apiStatus: ApiSt
     <header className="topbar"><div><p className="eyebrow">ARTEFATOS DE SOFTWARE</p><h1>Casos de teste</h1><p className="subtitle">Cadastre os casos que serão avaliados pela auditoria.</p></div><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></header>
     <section className="case-workspace"><form className="panel case-form" onSubmit={save}>
       <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco poderão ser identificados na auditoria.</p></div></div>
-      <div className="form-fields"><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
+      <div className="form-fields"><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pela correção * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
       <div className="form-actions"><button className="text-button" type="button" onClick={reset}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
       {message && <p className="case-message" role="status">{message}</p>}
     </form>
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${cases.length} caso(s) no banco compartilhado.`}</p></div></div>
-      <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Crie o primeiro usando o formulário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Responsável: {testCase.author_name}</p></div><div className="case-summary-actions"><button className="text-button" type="button" onClick={() => edit(testCase)}>Editar</button><button className="danger-button" type="button" onClick={() => void remove(testCase)}>Excluir</button></div></article>)}</div>
+      <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Crie o primeiro usando o formulário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p></div><div className="case-summary-actions"><button className="text-button" type="button" onClick={() => edit(testCase)}>Editar</button><button className="danger-button" type="button" onClick={() => void remove(testCase)}>Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
   </main></div>

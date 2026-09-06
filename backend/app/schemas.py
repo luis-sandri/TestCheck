@@ -43,6 +43,7 @@ class UserOutput(BaseModel):
 
 class TestCaseInput(BaseModel):
     title: str = Field(min_length=3, max_length=180)
+    responsible_email: str = Field(default="", max_length=255)
     description: str = Field(default="", max_length=10_000)
     preconditions: str = Field(default="", max_length=10_000)
     steps: str = Field(default="", max_length=20_000)
@@ -52,6 +53,7 @@ class TestCaseInput(BaseModel):
 
     @field_validator(
         "title",
+        "responsible_email",
         "description",
         "preconditions",
         "steps",
@@ -62,6 +64,14 @@ class TestCaseInput(BaseModel):
     @classmethod
     def trim_text(cls, value: str) -> str:
         return value.strip()
+
+    @field_validator("responsible_email")
+    @classmethod
+    def clean_responsible_email(cls, value: str) -> str:
+        email = value.strip().lower()
+        if email and ("@" not in email or email.startswith("@") or email.endswith("@")):
+            raise ValueError("Informe um e-mail válido para o responsável.")
+        return email
 
 
 class TestCaseOutput(BaseModel):
@@ -76,5 +86,6 @@ class TestCaseOutput(BaseModel):
     approval_criteria: str | None
     author_id: str
     author_name: str
+    responsible_email: str
     created_at: datetime
     updated_at: datetime

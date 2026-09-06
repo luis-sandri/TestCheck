@@ -26,6 +26,7 @@ def serialize_case(test_case: TestCase) -> TestCaseOutput:
         approval_criteria=test_case.approval_criteria,
         author_id=test_case.author_id,
         author_name=test_case.author.full_name,
+        responsible_email=test_case.responsible_email or test_case.author.email,
         created_at=test_case.created_at,
         updated_at=test_case.updated_at,
     )
@@ -68,7 +69,9 @@ def create_test_case(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TestCaseOutput:
-    test_case = TestCase(code=next_code(db), author_id=current_user.id, **payload.model_dump())
+    values = payload.model_dump()
+    values["responsible_email"] = values["responsible_email"] or current_user.email
+    test_case = TestCase(code=next_code(db), author_id=current_user.id, **values)
     db.add(test_case)
     db.commit()
     db.refresh(test_case)
@@ -93,7 +96,10 @@ def update_test_case(
 ) -> TestCaseOutput:
     test_case = get_case_or_404(case_id, db)
     ensure_can_edit(test_case, current_user)
-    for field, value in payload.model_dump().items():
+    values = payload.model_dump()
+    if not values["responsible_email"]:
+        values["responsible_email"] = test_case.responsible_email or test_case.author.email
+    for field, value in values.items():
         setattr(test_case, field, value)
     db.commit()
     return serialize_case(get_case_or_404(case_id, db))

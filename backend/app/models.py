@@ -114,6 +114,7 @@ class TestCase(Base):
     expected_result: Mapped[str | None] = mapped_column(Text)
     approval_criteria: Mapped[str | None] = mapped_column(Text)
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    responsible_email: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

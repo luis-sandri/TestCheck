@@ -34,7 +34,13 @@ def ensure_database_ready() -> None:
     A criação é idempotente: tabelas e dados existentes não são removidos.
     """
     Base.metadata.create_all(bind=engine)
-    with engine.connect() as connection:
+    with engine.begin() as connection:
+        # A primeira versão já pode estar no Neon; por isso evoluímos esta
+        # coluna de forma segura até as migrations passarem a ser executadas no deploy.
+        if engine.dialect.name == "postgresql":
+            connection.execute(
+                text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS responsible_email VARCHAR(255)")
+            )
         connection.execute(text("SELECT 1"))
 
 
