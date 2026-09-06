@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .auth import get_current_user
 from .database import get_db
+from .email_service import send_notification_email
 from .models import (
     Audit,
     AuditItem,
@@ -127,16 +128,16 @@ def submit_evidence(
         else NonconformityStatus.WAITING_VALIDATION
     )
     auditor = nonconformity.audit_item.audit.auditor
-    db.add(
-        Notification(
-            recipient_id=auditor.id,
-            recipient_email=auditor.email,
-            nonconformity_id=nonconformity.id,
-            notification_type=NotificationType.EVIDENCE_SUBMITTED,
-            title=f"Evidência enviada para {nonconformity.code}",
-            message=f"{current_user.full_name} enviou uma evidência para validação.",
-        )
+    notification = Notification(
+        recipient_id=auditor.id,
+        recipient_email=auditor.email,
+        nonconformity_id=nonconformity.id,
+        notification_type=NotificationType.EVIDENCE_SUBMITTED,
+        title=f"Evidência enviada para {nonconformity.code}",
+        message=f"{current_user.full_name} enviou uma evidência para validação.",
     )
+    db.add(notification)
+    send_notification_email(notification, notification.message)
     db.commit()
     db.expire_all()
     return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)
@@ -166,16 +167,16 @@ def review_evidence(
         nonconformity.resolved_at = datetime.now(UTC)
     else:
         nonconformity.status = NonconformityStatus.IN_CORRECTION
-    db.add(
-        Notification(
-            recipient_id=nonconformity.assignee_id,
-            recipient_email=nonconformity.assignee_email or "",
-            nonconformity_id=nonconformity.id,
-            notification_type=NotificationType.EVIDENCE_REVIEWED,
-            title=f"Evidência de {nonconformity.code} revisada",
-            message="A evidência foi aprovada." if payload.approved else "A evidência precisa de ajustes.",
-        )
+    notification = Notification(
+        recipient_id=nonconformity.assignee_id,
+        recipient_email=nonconformity.assignee_email or "",
+        nonconformity_id=nonconformity.id,
+        notification_type=NotificationType.EVIDENCE_REVIEWED,
+        title=f"Evidência de {nonconformity.code} revisada",
+        message="A evidência foi aprovada." if payload.approved else "A evidência precisa de ajustes.",
     )
+    db.add(notification)
+    send_notification_email(notification, notification.message)
     db.commit()
     db.expire_all()
     return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)

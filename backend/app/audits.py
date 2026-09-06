@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .auth import get_current_user
 from .database import get_db
+from .email_service import send_notification_email
 from .models import (
     Audit,
     AuditItem,
@@ -142,16 +143,16 @@ def run_audit(
         )
         db.add(nonconformity)
         db.flush()
-        db.add(
-            Notification(
-                recipient_id=assignee.id if assignee else None,
-                recipient_email=assignee_email,
-                nonconformity_id=nonconformity.id,
-                notification_type=NotificationType.NONCONFORMITY_ASSIGNED,
-                title=f"{nonconformity.code} atribuída a você",
-                message=f"A auditoria do caso {test_case.code} identificou: {label} não informado.",
-            )
+        notification = Notification(
+            recipient_id=assignee.id if assignee else None,
+            recipient_email=assignee_email,
+            nonconformity_id=nonconformity.id,
+            notification_type=NotificationType.NONCONFORMITY_ASSIGNED,
+            title=f"{nonconformity.code} atribuída a você",
+            message=f"A auditoria do caso {test_case.code} identificou: {label} não informado.",
         )
+        db.add(notification)
+        send_notification_email(notification, notification.message)
 
     audit.adherence_percentage = round((conforming_items / len(CHECKLIST)) * 100)
     db.commit()

@@ -65,3 +65,17 @@ verificação da API será `/api/health`.
 Para persistir dados em produção, configure a variável `DATABASE_URL` no
 projeto da Vercel com a URL de um PostgreSQL gerenciado e execute a migração
 contra esse banco antes de usar o sistema.
+
+## E-mails de não conformidade
+
+O TestCheck usa o [Resend](https://resend.com) para avisar sobre uma NC criada,
+uma evidência enviada e uma evidência revisada. No painel da Vercel, configure
+as variáveis de produção abaixo:
+
+- `RESEND_API_KEY`: chave iniciada por `re_`, criada no painel do Resend;
+- `EMAIL_FROM`: remetente aprovado. Para testes, use `TestCheck <onboarding@resend.dev>`;
+- `APP_URL`: `https://testcheck-luispazinsandri-7901s-projects.vercel.app`.
+
+Sem `RESEND_API_KEY`, a aplicação continua registrando as notificações no banco,
+mas não envia mensagens externas. O domínio próprio precisa ser verificado no
+Resend antes de ser usado como remetente.

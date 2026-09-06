@@ -10,6 +10,9 @@ class Settings(BaseSettings):
         "postgresql+psycopg://testcheck:testcheck@localhost:5432/testcheck"
     )
     frontend_origin: str = "http://localhost:5173"
+    app_url: str = "http://localhost:5173"
+    resend_api_key: str | None = None
+    email_from: str = "TestCheck <onboarding@resend.dev>"
     session_cookie_name: str = "testcheck_session"
     session_duration_hours: int = 168
 
