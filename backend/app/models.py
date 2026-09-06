@@ -96,6 +96,9 @@ class User(Base):
     )
     evidences: Mapped[list[Evidence]] = relationship(back_populates="submitted_by")
     notifications: Mapped[list[Notification]] = relationship(back_populates="recipient")
+    sessions: Mapped[list[UserSession]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 class TestCase(Base):
@@ -241,3 +244,16 @@ class Notification(Base):
     )
 
     recipient: Mapped[User | None] = relationship(back_populates="notifications")
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id: Mapped[str] = mapped_column(String(128), primary_key=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped[User] = relationship(back_populates="sessions")

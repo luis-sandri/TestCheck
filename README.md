@@ -38,6 +38,7 @@ O schema inicial possui as entidades necessárias para o fluxo do MVP:
 - não conformidades;
 - evidências enviadas pelo responsável.
 - notificações internas e entregas de e-mail.
+- sessões persistidas para login por e-mail e senha.
 
 As alterações de estrutura são controladas pelo Alembic. Para criar uma nova
 migração após alterar os modelos, execute em `backend`:

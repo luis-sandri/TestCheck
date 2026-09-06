@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     )
     frontend_origin: str = "http://localhost:5173"
     session_cookie_name: str = "testcheck_session"
+    session_duration_hours: int = 168
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),

@@ -5,6 +5,7 @@ from sqlalchemy import text
 from .config import get_settings
 from .database import Base, engine
 from . import models  # noqa: F401 - registra as tabelas do schema inicial
+from .auth import router as auth_router
 
 
 settings = get_settings()
@@ -22,6 +23,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 
 
 def ensure_database_ready() -> None:
