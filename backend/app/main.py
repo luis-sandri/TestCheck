@@ -1,10 +1,9 @@
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
-from sqlalchemy.orm import Session
 
 from .config import get_settings
-from .database import Base, engine, get_db
+from .database import Base, engine
 from . import models  # noqa: F401 - registra as tabelas do schema inicial
 
 
@@ -25,20 +24,30 @@ app.add_middleware(
 )
 
 
+def ensure_database_ready() -> None:
+    """Cria o schema inicial e confirma a comunicação com o PostgreSQL.
+
+    A criação é idempotente: tabelas e dados existentes não são removidos.
+    """
+    Base.metadata.create_all(bind=engine)
+    with engine.connect() as connection:
+        connection.execute(text("SELECT 1"))
+
+
 @app.get("/health", tags=["Sistema"])
 def health_check() -> dict[str, str]:
-    return {"status": "ok", "service": settings.app_name}
+    ensure_database_ready()
+    return {"status": "ok", "service": settings.app_name, "database": "connected"}
 
 
 @app.get("/database/health", tags=["Sistema"])
-def database_health_check(db: Session = Depends(get_db)) -> dict[str, str]:
+def database_health_check() -> dict[str, str]:
     """Inicializa o schema e verifica a comunicação com o PostgreSQL.
 
     A inicialização é idempotente: não recria nem apaga tabelas já existentes.
     As migrations do Alembic continuam sendo a referência para evoluções futuras.
     """
-    Base.metadata.create_all(bind=engine)
-    db.execute(text("SELECT 1"))
+    ensure_database_ready()
     return {"status": "ok", "database": "connected", "schema": "ready"}
 
 
