@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from .models import UserRole
+from .models import AuditStatus, ChecklistResult, UserRole
 
 
 class RegisterInput(BaseModel):
@@ -89,3 +89,28 @@ class TestCaseOutput(BaseModel):
     responsible_email: str
     created_at: datetime
     updated_at: datetime
+
+
+class AuditStartInput(BaseModel):
+    test_case_id: str = Field(min_length=1, max_length=36)
+
+
+class AuditItemOutput(BaseModel):
+    checklist_code: str
+    checklist_label: str
+    result: ChecklistResult | None
+    note: str | None
+
+
+class AuditOutput(BaseModel):
+    id: str
+    test_case_id: str
+    test_case_code: str
+    test_case_title: str
+    auditor_name: str
+    status: AuditStatus
+    adherence_percentage: int | None
+    nonconformity_count: int
+    items: list[AuditItemOutput]
+    created_at: datetime
+    completed_at: datetime | None

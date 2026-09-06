@@ -57,3 +57,22 @@ def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     assert len(client.get("/test-cases").json()) == 1
     assert client.delete(f"/test-cases/{case_id}").status_code == 204
     assert client.get("/test-cases").json() == []
+
+
+def test_run_automated_audit_generates_nonconformities(client: TestClient) -> None:
+    authenticate(client)
+    created = client.post(
+        "/test-cases",
+        json={
+            "title": "Login válido",
+            "steps": "1. Informar credenciais",
+            "expected_result": "Acesso liberado",
+        },
+    )
+    audit = client.post("/audits", json={"test_case_id": created.json()["id"]})
+
+    assert audit.status_code == 201
+    assert audit.json()["status"] == "COMPLETED"
+    assert audit.json()["adherence_percentage"] == 33
+    assert audit.json()["nonconformity_count"] == 4
+    assert len(client.get("/audits").json()) == 1
