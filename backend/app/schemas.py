@@ -2,7 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
-from .models import AuditStatus, ChecklistResult, UserRole
+from .models import (
+    AuditStatus,
+    ChecklistResult,
+    EvidenceStatus,
+    EvidenceType,
+    NonconformitySeverity,
+    NonconformityStatus,
+    UserRole,
+)
 
 
 class RegisterInput(BaseModel):
@@ -114,3 +122,51 @@ class AuditOutput(BaseModel):
     items: list[AuditItemOutput]
     created_at: datetime
     completed_at: datetime | None
+
+
+class EvidenceInput(BaseModel):
+    description: str = Field(min_length=3, max_length=10_000)
+    resource_url: str = Field(default="", max_length=2_048)
+    evidence_type: EvidenceType = EvidenceType.CORRECTION
+
+    @field_validator("description", "resource_url")
+    @classmethod
+    def clean_evidence_text(cls, value: str) -> str:
+        return value.strip()
+
+
+class EvidenceReviewInput(BaseModel):
+    evidence_id: str = Field(min_length=1, max_length=36)
+    approved: bool
+    comment: str = Field(default="", max_length=10_000)
+
+    @field_validator("comment")
+    @classmethod
+    def clean_comment(cls, value: str) -> str:
+        return value.strip()
+
+
+class EvidenceOutput(BaseModel):
+    id: str
+    description: str | None
+    resource_url: str | None
+    evidence_type: EvidenceType
+    status: EvidenceStatus
+    submitted_by_name: str
+    submitted_at: datetime
+    reviewer_comment: str | None
+
+
+class NonconformityOutput(BaseModel):
+    id: str
+    code: str
+    test_case_code: str
+    test_case_title: str
+    description: str
+    severity: NonconformitySeverity
+    status: NonconformityStatus
+    due_date: str | None
+    assignee_email: str | None
+    can_submit_evidence: bool
+    can_review: bool
+    evidences: list[EvidenceOutput]

@@ -711,6 +711,96 @@ td strong {
 .audit-result.conforming { color: var(--green); background: var(--green-soft); }
 .audit-result.nonconforming { color: var(--red); background: var(--red-soft); }
 
+.nonconformity-list {
+  display: grid;
+  gap: 16px;
+  margin-top: 34px;
+}
+
+.nonconformity-card {
+  padding: 22px 24px;
+}
+
+.nc-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.nc-header h2 {
+  margin: 5px 0;
+  font-size: 16px;
+}
+
+.nc-header p,
+.nc-meta,
+.evidence-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.nc-badges,
+.review-actions,
+.evidence-form > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.nc-meta {
+  margin-top: 14px;
+  font-size: 11px;
+}
+
+.evidence-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #edf0f5;
+}
+
+.evidence-form textarea {
+  width: 100%;
+  min-height: 78px;
+  padding: 10px 12px;
+  border: 1px solid #dbe2ed;
+  border-radius: 9px;
+  color: var(--navy);
+  font: inherit;
+  outline: none;
+  resize: vertical;
+}
+
+.evidence-form textarea:focus {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 3px rgba(49, 94, 251, 0.14);
+}
+
+.evidence-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.evidence-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  padding: 11px 12px;
+  border-radius: 9px;
+  background: #f8faff;
+}
+
+.evidence-item strong {
+  display: block;
+  margin-bottom: 3px;
+  color: #42506a;
+  font-size: 11px;
+}
+
 .case-form,
 .case-list {
   overflow: hidden;
@@ -849,6 +939,7 @@ td strong {
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .content-grid { grid-template-columns: 1fr; }
   .case-workspace, .audit-workspace { grid-template-columns: 1fr; }
+  .nc-header { flex-direction: column; }
 }
 
 @media (max-width: 760px) {
@@ -860,9 +951,11 @@ td strong {
   main { padding: 26px 16px 36px; }
   .topbar { flex-direction: column; }
   .primary-button { width: 100%; justify-content: center; }
+  .audit-case .primary-button { width: auto; }
   .metrics { grid-template-columns: 1fr; }
   .metric-card { min-height: 130px; }
   th, td { padding-inline: 16px; }
+  .evidence-item { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 460px) {

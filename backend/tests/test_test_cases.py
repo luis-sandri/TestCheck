@@ -76,3 +76,19 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     assert audit.json()["adherence_percentage"] == 33
     assert audit.json()["nonconformity_count"] == 4
     assert len(client.get("/audits").json()) == 1
+
+    nonconformity = client.get("/nonconformities").json()[0]
+    evidence = client.post(
+        f"/nonconformities/{nonconformity['id']}/evidences",
+        json={"description": "O campo foi preenchido e revisado."},
+    )
+    assert evidence.status_code == 200
+    assert evidence.json()["status"] == "WAITING_VALIDATION"
+    assert evidence.json()["evidences"][0]["status"] == "SUBMITTED"
+
+    reviewed = client.post(
+        f"/nonconformities/{nonconformity['id']}/review",
+        json={"evidence_id": evidence.json()["evidences"][0]["id"], "approved": True},
+    )
+    assert reviewed.status_code == 200
+    assert reviewed.json()["status"] == "RESOLVED"

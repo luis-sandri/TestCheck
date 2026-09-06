@@ -16,6 +16,10 @@ type AuditData = {
   status: 'DRAFT' | 'COMPLETED'; adherence_percentage: number | null; nonconformity_count: number
   items: AuditItemData[]; created_at: string; completed_at: string | null
 }
+type EvidenceData = { id: string; description: string | null; resource_url: string | null; evidence_type: 'CORRECTION' | 'CONTESTATION'; status: 'SUBMITTED' | 'APPROVED' | 'REJECTED'; submitted_by_name: string; submitted_at: string; reviewer_comment: string | null }
+type NonconformityData = {
+  id: string; code: string; test_case_code: string; test_case_title: string; description: string; severity: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'OPEN' | 'IN_CORRECTION' | 'WAITING_VALIDATION' | 'CONTESTED' | 'RESOLVED'; due_date: string | null; assignee_email: string | null; can_submit_evidence: boolean; can_review: boolean; evidences: EvidenceData[]
+}
 
 const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
   title: '', responsible_email: responsibleEmail, description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
@@ -81,7 +85,7 @@ function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAu
   </section></main>
 }
 
-function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onOpenAudits: () => void; onLogout: () => void }) {
+function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconformities, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void; onLogout: () => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
   const [form, setForm] = useState<TestCaseForm>(() => blankTestCase(user.email))
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -155,7 +159,7 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onLogout }: { ap
 
   return <div className="app-shell"><aside className="sidebar">
     <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
-    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item active" href="#test-cases"><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item" href="#nonconformities"><span aria-hidden="true">!</span> Não conformidades</a></nav>
+    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item active" href="#test-cases"><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item" href="#nonconformities" onClick={(event) => { event.preventDefault(); onOpenNonconformities() }}><span aria-hidden="true">!</span> Não conformidades</a></nav>
     <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>Responsável</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
   </aside><main>
     <header className="topbar"><div><p className="eyebrow">ARTEFATOS DE SOFTWARE</p><h1>Casos de teste</h1><p className="subtitle">Cadastre os casos que serão avaliados pela auditoria.</p></div><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></header>
@@ -172,7 +176,7 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onLogout }: { ap
   </main></div>
 }
 
-function AuditPage({ apiStatus, user, onBack, onOpenCases, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onOpenCases: () => void; onLogout: () => void }) {
+function AuditPage({ apiStatus, user, onBack, onOpenCases, onOpenNonconformities, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onOpenCases: () => void; onOpenNonconformities: () => void; onLogout: () => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
   const [audits, setAudits] = useState<AuditData[]>([])
   const [loading, setLoading] = useState(true)
@@ -206,7 +210,7 @@ function AuditPage({ apiStatus, user, onBack, onOpenCases, onLogout }: { apiStat
 
   return <div className="app-shell"><aside className="sidebar">
     <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
-    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item active" href="#audits"><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item" href="#nonconformities"><span aria-hidden="true">!</span> Não conformidades</a></nav>
+    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item active" href="#audits"><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item" href="#nonconformities" onClick={(event) => { event.preventDefault(); onOpenNonconformities() }}><span aria-hidden="true">!</span> Não conformidades</a></nav>
     <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>Auditor</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
   </aside><main>
     <header className="topbar"><div><p className="eyebrow">AUDITORIA AUTOMATIZADA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Avalie os campos essenciais e gere não conformidades automaticamente.</p></div></header>
@@ -215,7 +219,60 @@ function AuditPage({ apiStatus, user, onBack, onOpenCases, onLogout }: { apiStat
   </main></div>
 }
 
-function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits }: { apiStatus: ApiStatus; user: CurrentUser; onLogout: () => void; onOpenCases: () => void; onOpenAudits: () => void }) {
+function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudits, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onOpenCases: () => void; onOpenAudits: () => void; onLogout: () => void }) {
+  const [nonconformities, setNonconformities] = useState<NonconformityData[]>([])
+  const [drafts, setDrafts] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [sending, setSending] = useState<string | null>(null)
+  const [message, setMessage] = useState('')
+
+  const loadNonconformities = async () => {
+    setLoading(true)
+    try {
+      const response = await fetch('/api/nonconformities', { credentials: 'include' })
+      if (!response.ok) throw new Error()
+      setNonconformities(await response.json() as NonconformityData[])
+    } catch { setMessage('Não foi possível carregar as não conformidades.') } finally { setLoading(false) }
+  }
+
+  useEffect(() => { void loadNonconformities() }, [])
+  const submitEvidence = async (nonconformity: NonconformityData, evidenceType: 'CORRECTION' | 'CONTESTATION') => {
+    const description = (drafts[nonconformity.id] || '').trim()
+    if (description.length < 3) { setMessage('Descreva a correção ou a contestação antes de enviar.'); return }
+    setSending(nonconformity.id)
+    try {
+      const response = await fetch(`/api/nonconformities/${nonconformity.id}/evidences`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description, evidence_type: evidenceType }) })
+      const payload = await response.json().catch(() => ({})) as { detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível enviar a evidência.')
+      setDrafts((current) => ({ ...current, [nonconformity.id]: '' }))
+      setMessage(evidenceType === 'CORRECTION' ? 'Correção enviada para validação do auditor.' : 'Contestação enviada para análise do auditor.')
+      await loadNonconformities()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível enviar a evidência.') } finally { setSending(null) }
+  }
+  const reviewEvidence = async (nonconformity: NonconformityData, evidence: EvidenceData, approved: boolean) => {
+    setSending(nonconformity.id)
+    try {
+      const response = await fetch(`/api/nonconformities/${nonconformity.id}/review`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ evidence_id: evidence.id, approved }) })
+      const payload = await response.json().catch(() => ({})) as { detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível revisar a evidência.')
+      setMessage(approved ? 'Evidência aprovada e NC resolvida.' : 'Evidência devolvida para correção.')
+      await loadNonconformities()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível revisar a evidência.') } finally { setSending(null) }
+  }
+  const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', RESOLVED: 'Resolvida' }
+  const severityLabel: Record<NonconformityData['severity'], string> = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta' }
+
+  return <div className="app-shell"><aside className="sidebar">
+    <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
+    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item active" href="#nonconformities"><span aria-hidden="true">!</span> Não conformidades</a></nav>
+    <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>Responsável</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
+  </aside><main>
+    <header className="topbar"><div><p className="eyebrow">ACOMPANHAMENTO DE CORREÇÕES</p><h1>Não conformidades</h1><p className="subtitle">Envie evidências de correção, conteste uma NC ou valide o que foi entregue.</p></div></header>
+    <section className="nonconformity-list">{!loading && nonconformities.length === 0 && <section className="panel"><p className="empty-state">Nenhuma não conformidade atribuída à sua conta.</p></section>}{nonconformities.map((nonconformity) => <article className="panel nonconformity-card" key={nonconformity.id}><div className="nc-header"><div><span className="case-code">{nonconformity.code} · {nonconformity.test_case_code}</span><h2>{nonconformity.test_case_title}</h2><p>{nonconformity.description}</p></div><div className="nc-badges"><span className={`status ${nonconformity.severity === 'HIGH' ? 'danger' : nonconformity.severity === 'MEDIUM' ? 'warning' : 'success'}`}>{severityLabel[nonconformity.severity]}</span><span className="status warning">{statusLabel[nonconformity.status]}</span></div></div><p className="nc-meta">Responsável: {nonconformity.assignee_email} · Prazo: {nonconformity.due_date || 'não definido'}</p>{nonconformity.can_submit_evidence && nonconformity.status !== 'RESOLVED' && <div className="evidence-form"><textarea value={drafts[nonconformity.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [nonconformity.id]: event.target.value }))} placeholder="Descreva o que foi corrigido ou o motivo da contestação." /><div><button className="primary-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CORRECTION')}>Enviar correção</button><button className="text-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CONTESTATION')}>Contestar NC</button></div></div>}<div className="evidence-list">{nonconformity.evidences.map((evidence) => <article className="evidence-item" key={evidence.id}><div><strong>{evidence.evidence_type === 'CORRECTION' ? 'Correção' : 'Contestação'} por {evidence.submitted_by_name}</strong><p>{evidence.description}</p></div><span className={`status ${evidence.status === 'APPROVED' ? 'success' : evidence.status === 'REJECTED' ? 'danger' : 'warning'}`}>{evidence.status === 'SUBMITTED' ? 'Pendente' : evidence.status === 'APPROVED' ? 'Aprovada' : 'Devolvida'}</span>{nonconformity.can_review && evidence.status === 'SUBMITTED' && <div className="review-actions"><button className="text-button" disabled={sending === nonconformity.id} type="button" onClick={() => void reviewEvidence(nonconformity, evidence, true)}>Aprovar</button><button className="danger-button" disabled={sending === nonconformity.id} type="button" onClick={() => void reviewEvidence(nonconformity, evidence, false)}>Devolver</button></div>}</article>)}</div></article>)}{message && <p className="case-message" role="status">{message}</p>}<ApiState status={apiStatus} /></section>
+  </main></div>
+}
+
+function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits, onOpenNonconformities }: { apiStatus: ApiStatus; user: CurrentUser; onLogout: () => void; onOpenCases: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void }) {
   const startAudit = () => { onOpenAudits() }
   const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
 
@@ -225,7 +282,7 @@ function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits }: { a
       <a className="nav-item active" href="#dashboard"><span aria-hidden="true">◫</span> Visão geral</a>
       <a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a>
       <a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a>
-      <a className="nav-item" href="#nonconformities"><span aria-hidden="true">!</span> Não conformidades</a>
+      <a className="nav-item" href="#nonconformities" onClick={(event) => { event.preventDefault(); onOpenNonconformities() }}><span aria-hidden="true">!</span> Não conformidades</a>
     </nav>
     <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>{roleLabel}</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
   </aside><main id="dashboard">
@@ -246,7 +303,12 @@ function App() {
   const [apiStatus, setApiStatus] = useState<ApiStatus>('checking')
   const [user, setUser] = useState<CurrentUser | null>(null)
   const [loadingSession, setLoadingSession] = useState(true)
-  const [view, setView] = useState<'dashboard' | 'test-cases' | 'audits'>('dashboard')
+  const [view, setView] = useState<'dashboard' | 'test-cases' | 'audits' | 'nonconformities'>(() => {
+    if (window.location.hash === '#test-cases') return 'test-cases'
+    if (window.location.hash === '#audits') return 'audits'
+    if (window.location.hash === '#nonconformities') return 'nonconformities'
+    return 'dashboard'
+  })
   useEffect(() => {
     const loadSession = async () => {
       try {
@@ -262,9 +324,10 @@ function App() {
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); setUser(null); setView('dashboard') }
   if (loadingSession) return <main className="loading-page">Carregando TestCheck…</main>
   if (!user) return <AuthScreen apiStatus={apiStatus} onAuthenticated={setUser} />
-  if (view === 'test-cases') return <TestCasesPage apiStatus={apiStatus} user={user} onBack={() => setView('dashboard')} onOpenAudits={() => setView('audits')} onLogout={logout} />
-  if (view === 'audits') return <AuditPage apiStatus={apiStatus} user={user} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onLogout={logout} />
-  return <Dashboard apiStatus={apiStatus} user={user} onLogout={logout} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} />
+  if (view === 'test-cases') return <TestCasesPage apiStatus={apiStatus} user={user} onBack={() => setView('dashboard')} onOpenAudits={() => setView('audits')} onOpenNonconformities={() => setView('nonconformities')} onLogout={logout} />
+  if (view === 'audits') return <AuditPage apiStatus={apiStatus} user={user} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onOpenNonconformities={() => setView('nonconformities')} onLogout={logout} />
+  if (view === 'nonconformities') return <NonconformitiesPage apiStatus={apiStatus} user={user} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} onLogout={logout} />
+  return <Dashboard apiStatus={apiStatus} user={user} onLogout={logout} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} onOpenNonconformities={() => setView('nonconformities')} />
 }
 
 export default App
