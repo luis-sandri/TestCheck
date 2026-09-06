@@ -12,4 +12,5 @@ def test_initial_schema_contains_the_mvp_entities() -> None:
         "audit_items",
         "nonconformities",
         "evidences",
+        "notifications",
     }

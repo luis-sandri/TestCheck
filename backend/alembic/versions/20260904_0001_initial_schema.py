@@ -87,9 +87,10 @@ def upgrade() -> None:
         sa.Column("test_case_id", sa.String(length=36), nullable=False),
         sa.Column("audit_item_id", sa.String(length=36), nullable=False),
         sa.Column("assignee_id", sa.String(length=36), nullable=True),
+        sa.Column("assignee_email", sa.String(length=255), nullable=True),
         sa.Column("description", sa.Text(), nullable=False),
         sa.Column("severity", sa.Enum("LOW", "MEDIUM", "HIGH", native_enum=False), nullable=False),
-        sa.Column("status", sa.Enum("OPEN", "IN_CORRECTION", "WAITING_VALIDATION", "RESOLVED", native_enum=False), nullable=False),
+        sa.Column("status", sa.Enum("OPEN", "IN_CORRECTION", "WAITING_VALIDATION", "CONTESTED", "RESOLVED", native_enum=False), nullable=False),
         sa.Column("due_date", sa.Date(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("resolved_at", sa.DateTime(timezone=True), nullable=True),
@@ -101,6 +102,7 @@ def upgrade() -> None:
         sa.UniqueConstraint("code"),
     )
     op.create_index("ix_nonconformities_assignee_id", "nonconformities", ["assignee_id"])
+    op.create_index("ix_nonconformities_assignee_email", "nonconformities", ["assignee_email"])
     op.create_index("ix_nonconformities_code", "nonconformities", ["code"])
     op.create_index("ix_nonconformities_test_case_id", "nonconformities", ["test_case_id"])
 
@@ -112,6 +114,7 @@ def upgrade() -> None:
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("resource_url", sa.String(length=2048), nullable=True),
         sa.Column("file_name", sa.String(length=255), nullable=True),
+        sa.Column("evidence_type", sa.Enum("CORRECTION", "CONTESTATION", native_enum=False), nullable=False),
         sa.Column("status", sa.Enum("SUBMITTED", "APPROVED", "REJECTED", native_enum=False), nullable=False),
         sa.Column("submitted_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("reviewed_at", sa.DateTime(timezone=True), nullable=True),
@@ -122,13 +125,48 @@ def upgrade() -> None:
     )
     op.create_index("ix_evidences_nonconformity_id", "evidences", ["nonconformity_id"])
 
+    op.create_table(
+        "notifications",
+        sa.Column("id", sa.String(length=36), nullable=False),
+        sa.Column("recipient_id", sa.String(length=36), nullable=True),
+        sa.Column("recipient_email", sa.String(length=255), nullable=False),
+        sa.Column("nonconformity_id", sa.String(length=36), nullable=True),
+        sa.Column(
+            "notification_type",
+            sa.Enum(
+                "NONCONFORMITY_ASSIGNED",
+                "ACCOUNT_INVITATION",
+                "EVIDENCE_SUBMITTED",
+                "EVIDENCE_REVIEWED",
+                native_enum=False,
+            ),
+            nullable=False,
+        ),
+        sa.Column("title", sa.String(length=180), nullable=False),
+        sa.Column("message", sa.Text(), nullable=False),
+        sa.Column("is_read", sa.Boolean(), nullable=False),
+        sa.Column("email_sent_at", sa.DateTime(timezone=True), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(["nonconformity_id"], ["nonconformities.id"]),
+        sa.ForeignKeyConstraint(["recipient_id"], ["users.id"]),
+        sa.PrimaryKeyConstraint("id"),
+    )
+    op.create_index("ix_notifications_recipient_id", "notifications", ["recipient_id"])
+    op.create_index("ix_notifications_recipient_email", "notifications", ["recipient_email"])
+    op.create_index("ix_notifications_nonconformity_id", "notifications", ["nonconformity_id"])
+
 
 def downgrade() -> None:
+    op.drop_index("ix_notifications_nonconformity_id", table_name="notifications")
+    op.drop_index("ix_notifications_recipient_email", table_name="notifications")
+    op.drop_index("ix_notifications_recipient_id", table_name="notifications")
+    op.drop_table("notifications")
     op.drop_index("ix_evidences_nonconformity_id", table_name="evidences")
     op.drop_table("evidences")
     op.drop_index("ix_nonconformities_test_case_id", table_name="nonconformities")
     op.drop_index("ix_nonconformities_code", table_name="nonconformities")
     op.drop_index("ix_nonconformities_assignee_id", table_name="nonconformities")
+    op.drop_index("ix_nonconformities_assignee_email", table_name="nonconformities")
     op.drop_table("nonconformities")
     op.drop_index("ix_audit_items_audit_id", table_name="audit_items")
     op.drop_table("audit_items")

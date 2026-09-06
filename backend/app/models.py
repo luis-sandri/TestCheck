@@ -10,7 +10,7 @@ from datetime import date, datetime
 from enum import StrEnum
 from uuid import uuid4
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -48,6 +48,7 @@ class NonconformityStatus(StrEnum):
     OPEN = "OPEN"
     IN_CORRECTION = "IN_CORRECTION"
     WAITING_VALIDATION = "WAITING_VALIDATION"
+    CONTESTED = "CONTESTED"
     RESOLVED = "RESOLVED"
 
 
@@ -55,6 +56,18 @@ class EvidenceStatus(StrEnum):
     SUBMITTED = "SUBMITTED"
     APPROVED = "APPROVED"
     REJECTED = "REJECTED"
+
+
+class EvidenceType(StrEnum):
+    CORRECTION = "CORRECTION"
+    CONTESTATION = "CONTESTATION"
+
+
+class NotificationType(StrEnum):
+    NONCONFORMITY_ASSIGNED = "NONCONFORMITY_ASSIGNED"
+    ACCOUNT_INVITATION = "ACCOUNT_INVITATION"
+    EVIDENCE_SUBMITTED = "EVIDENCE_SUBMITTED"
+    EVIDENCE_REVIEWED = "EVIDENCE_REVIEWED"
 
 
 class User(Base):
@@ -82,6 +95,7 @@ class User(Base):
         back_populates="assignee", foreign_keys="Nonconformity.assignee_id"
     )
     evidences: Mapped[list[Evidence]] = relationship(back_populates="submitted_by")
+    notifications: Mapped[list[Notification]] = relationship(back_populates="recipient")
 
 
 class TestCase(Base):
@@ -157,6 +171,7 @@ class Nonconformity(Base):
     test_case_id: Mapped[str] = mapped_column(ForeignKey("test_cases.id"), nullable=False, index=True)
     audit_item_id: Mapped[str] = mapped_column(ForeignKey("audit_items.id"), unique=True, nullable=False)
     assignee_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    assignee_email: Mapped[str | None] = mapped_column(String(255), index=True)
     description: Mapped[str] = mapped_column(Text)
     severity: Mapped[NonconformitySeverity] = mapped_column(
         Enum(NonconformitySeverity, native_enum=False), default=NonconformitySeverity.MEDIUM
@@ -191,6 +206,9 @@ class Evidence(Base):
     description: Mapped[str | None] = mapped_column(Text)
     resource_url: Mapped[str | None] = mapped_column(String(2_048))
     file_name: Mapped[str | None] = mapped_column(String(255))
+    evidence_type: Mapped[EvidenceType] = mapped_column(
+        Enum(EvidenceType, native_enum=False), default=EvidenceType.CORRECTION
+    )
     status: Mapped[EvidenceStatus] = mapped_column(
         Enum(EvidenceStatus, native_enum=False), default=EvidenceStatus.SUBMITTED
     )
@@ -202,3 +220,24 @@ class Evidence(Base):
 
     nonconformity: Mapped[Nonconformity] = relationship(back_populates="evidences")
     submitted_by: Mapped[User] = relationship(back_populates="evidences")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
+    recipient_id: Mapped[str | None] = mapped_column(ForeignKey("users.id"), index=True)
+    recipient_email: Mapped[str] = mapped_column(String(255), index=True)
+    nonconformity_id: Mapped[str | None] = mapped_column(ForeignKey("nonconformities.id"), index=True)
+    notification_type: Mapped[NotificationType] = mapped_column(
+        Enum(NotificationType, native_enum=False)
+    )
+    title: Mapped[str] = mapped_column(String(180))
+    message: Mapped[str] = mapped_column(Text)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    email_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    recipient: Mapped[User | None] = relationship(back_populates="notifications")
