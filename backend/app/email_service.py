@@ -60,6 +60,8 @@ def send_notification_email(notification: Notification, body: str) -> bool:
             headers={
                 "Authorization": f"Bearer {settings.resend_api_key}",
                 "Content-Type": "application/json",
+                # A Resend bloqueia requisições sem este cabeçalho com HTTP 403.
+                "User-Agent": "TestCheck/1.0",
             },
             method="POST",
         )
