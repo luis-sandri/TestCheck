@@ -103,6 +103,30 @@ def list_nonconformities(
     return [serialize_nonconformity(nonconformity, current_user) for nonconformity in nonconformities]
 
 
+@router.post("/{nonconformity_id}/notify")
+def retry_notification(
+    nonconformity_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, bool]:
+    """Reenvia a notificação de uma NC sem repetir a auditoria."""
+    nonconformity = get_nonconformity_or_404(nonconformity_id, db)
+    if not (can_submit(nonconformity, current_user) or can_review(nonconformity, current_user)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Você não pode reenviar esta notificação.")
+    notification = Notification(
+        recipient_id=nonconformity.assignee_id,
+        recipient_email=nonconformity.assignee_email or "",
+        nonconformity_id=nonconformity.id,
+        notification_type=NotificationType.NONCONFORMITY_ASSIGNED,
+        title=f"Lembrete: {nonconformity.code} aguarda sua ação",
+        message=f"A não conformidade {nonconformity.code} continua disponível para acompanhamento no TestCheck.",
+    )
+    db.add(notification)
+    email_sent = send_notification_email(notification, notification.message)
+    db.commit()
+    return {"email_sent": email_sent}
+
+
 @router.post("/{nonconformity_id}/evidences", response_model=NonconformityOutput)
 def submit_evidence(
     nonconformity_id: str,

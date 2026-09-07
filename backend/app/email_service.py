@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from html import escape
 import json
 import logging
+import re
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -18,6 +19,16 @@ from .models import Notification
 
 
 logger = logging.getLogger(__name__)
+
+
+def safe_resend_message(error: HTTPError) -> str:
+    """Extrai a mensagem pública da Resend sem registrar dados de contato."""
+    try:
+        payload = json.loads(error.read().decode("utf-8"))
+        message = str(payload.get("message") or payload.get("name") or "sem detalhes")
+    except (UnicodeDecodeError, json.JSONDecodeError, OSError):
+        return "sem detalhes"
+    return re.sub(r"[\w.+-]+@[\w.-]+", "<e-mail oculto>", message)[:300]
 
 
 def send_notification_email(notification: Notification, body: str) -> bool:
@@ -57,7 +68,11 @@ def send_notification_email(notification: Notification, body: str) -> bool:
                 logger.warning("Resend recusou o e-mail com status HTTP %s.", response.status)
                 return False
     except HTTPError as error:
-        logger.warning("Resend recusou o e-mail com status HTTP %s.", error.code)
+        logger.warning(
+            "Resend recusou o e-mail com status HTTP %s: %s",
+            error.code,
+            safe_resend_message(error),
+        )
         return False
     except URLError as error:
         logger.warning("Não foi possível conectar à Resend: %s", error.reason)
