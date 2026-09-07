@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from html import escape
 import json
+import logging
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -16,9 +17,13 @@ from .config import get_settings
 from .models import Notification
 
 
+logger = logging.getLogger(__name__)
+
+
 def send_notification_email(notification: Notification, body: str) -> bool:
     settings = get_settings()
     if not settings.resend_api_key or not notification.recipient_email:
+        logger.warning("E-mail não enviado: RESEND_API_KEY ou destinatário ausente.")
         return False
 
     html = f"""
@@ -49,9 +54,18 @@ def send_notification_email(notification: Notification, body: str) -> bool:
         )
         with urlopen(request, timeout=10) as response:
             if not 200 <= response.status < 300:
+                logger.warning("Resend recusou o e-mail com status HTTP %s.", response.status)
                 return False
-    except (HTTPError, URLError, OSError):
+    except HTTPError as error:
+        logger.warning("Resend recusou o e-mail com status HTTP %s.", error.code)
+        return False
+    except URLError as error:
+        logger.warning("Não foi possível conectar à Resend: %s", error.reason)
+        return False
+    except OSError as error:
+        logger.warning("Falha ao enviar e-mail pela Resend: %s", error)
         return False
 
     notification.email_sent_at = datetime.now(UTC)
+    logger.info("E-mail de notificação enviado pela Resend.")
     return True
