@@ -8,8 +8,9 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from html import escape
-
-import httpx
+import json
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from .config import get_settings
 from .models import Notification
@@ -30,19 +31,26 @@ def send_notification_email(notification: Notification, body: str) -> bool:
     </main>
     """
     try:
-        response = httpx.post(
+        request = Request(
             "https://api.resend.com/emails",
-            headers={"Authorization": f"Bearer {settings.resend_api_key}"},
-            json={
+            data=json.dumps(
+                {
                 "from": settings.email_from,
                 "to": [notification.recipient_email],
                 "subject": notification.title,
                 "html": html,
+                }
+            ).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {settings.resend_api_key}",
+                "Content-Type": "application/json",
             },
-            timeout=10.0,
+            method="POST",
         )
-        response.raise_for_status()
-    except httpx.HTTPError:
+        with urlopen(request, timeout=10) as response:
+            if not 200 <= response.status < 300:
+                return False
+    except (HTTPError, URLError, OSError):
         return False
 
     notification.email_sent_at = datetime.now(UTC)
