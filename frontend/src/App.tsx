@@ -47,7 +47,7 @@ function ApiState({ status }: { status: ApiStatus }) {
 function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
   active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
 }) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(() => window.matchMedia('(min-width: 761px)').matches)
   const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
   const navigate = (callback: () => void) => (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
@@ -56,12 +56,12 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
   }
 
   return <>
-    <button className="menu-toggle" type="button" aria-expanded={isOpen} aria-controls="main-navigation" onClick={() => setIsOpen((current) => !current)}>
-      <span aria-hidden="true">{isOpen ? '×' : '☰'}</span><span className="sr-only">{isOpen ? 'Fechar menu' : 'Abrir menu'}</span>
+    <button className={`mobile-menu-toggle ${isOpen ? 'is-hidden' : ''}`} type="button" aria-expanded={isOpen} aria-controls="main-navigation" onClick={() => setIsOpen(true)}>
+      <span aria-hidden="true">☰</span><span className="sr-only">Abrir menu</span>
     </button>
     {isOpen && <button className="sidebar-backdrop" type="button" aria-label="Fechar menu" onClick={() => setIsOpen(false)} />}
-    <aside className={`sidebar ${isOpen ? 'is-open' : ''}`} id="main-navigation">
-      <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
+    <aside className={`sidebar ${isOpen ? 'is-open' : 'is-collapsed'}`} id="main-navigation">
+      <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div><button className="sidebar-toggle" type="button" aria-expanded={isOpen} aria-label={isOpen ? 'Recolher menu' : 'Expandir menu'} onClick={() => setIsOpen((current) => !current)}>{isOpen ? '×' : '☰'}</button></div>
       <nav aria-label="Navegação principal">
         <a className={`nav-item ${active === 'dashboard' ? 'active' : ''}`} href="#dashboard" onClick={navigate(onDashboard)}><span aria-hidden="true">◫</span> Visão geral</a>
         <a className={`nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><span aria-hidden="true">≡</span> Casos de teste</a>
