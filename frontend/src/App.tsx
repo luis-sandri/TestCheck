@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import type { FormEvent, KeyboardEvent } from 'react'
+import type { FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import './App.css'
 
 type ApiStatus = 'checking' | 'online' | 'offline'
 type AuthMode = 'login' | 'register'
+type PageName = 'dashboard' | 'test-cases' | 'audits' | 'nonconformities'
 type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN' }
 type TestCaseData = {
   id: string; code: string; title: string; description: string; preconditions: string; steps: string
@@ -41,6 +42,35 @@ function ApiState({ status }: { status: ApiStatus }) {
     {status === 'online' && 'API e banco de dados conectados'}
     {status === 'offline' && 'Não foi possível conectar à API'}
   </div>
+}
+
+function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
+  active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
+}) {
+  const [isOpen, setIsOpen] = useState(false)
+  const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
+  const navigate = (callback: () => void) => (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+    setIsOpen(false)
+    callback()
+  }
+
+  return <>
+    <button className="menu-toggle" type="button" aria-expanded={isOpen} aria-controls="main-navigation" onClick={() => setIsOpen((current) => !current)}>
+      <span aria-hidden="true">{isOpen ? '×' : '☰'}</span><span className="sr-only">{isOpen ? 'Fechar menu' : 'Abrir menu'}</span>
+    </button>
+    {isOpen && <button className="sidebar-backdrop" type="button" aria-label="Fechar menu" onClick={() => setIsOpen(false)} />}
+    <aside className={`sidebar ${isOpen ? 'is-open' : ''}`} id="main-navigation">
+      <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
+      <nav aria-label="Navegação principal">
+        <a className={`nav-item ${active === 'dashboard' ? 'active' : ''}`} href="#dashboard" onClick={navigate(onDashboard)}><span aria-hidden="true">◫</span> Visão geral</a>
+        <a className={`nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><span aria-hidden="true">≡</span> Casos de teste</a>
+        <a className={`nav-item ${active === 'audits' ? 'active' : ''}`} href="#audits" onClick={navigate(onAudits)}><span aria-hidden="true">✓</span> Auditorias</a>
+        <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><span aria-hidden="true">!</span> Não conformidades</a>
+      </nav>
+      <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>{roleLabel}</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
+    </aside>
+  </>
 }
 
 function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAuthenticated: (user: CurrentUser) => void }) {
@@ -157,11 +187,7 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
     else { const payload = await response.json().catch(() => ({})); setMessage(payload.detail || 'Não foi possível excluir.') }
   }
 
-  return <div className="app-shell"><aside className="sidebar">
-    <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
-    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item active" href="#test-cases"><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item" href="#nonconformities" onClick={(event) => { event.preventDefault(); onOpenNonconformities() }}><span aria-hidden="true">!</span> Não conformidades</a></nav>
-    <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>Responsável</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
-  </aside><main>
+  return <div className="app-shell"><Sidebar active="test-cases" user={user} onDashboard={onBack} onCases={() => undefined} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
     <header className="topbar"><div><p className="eyebrow">ARTEFATOS DE SOFTWARE</p><h1>Casos de teste</h1><p className="subtitle">Cadastre os casos que serão avaliados pela auditoria.</p></div><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></header>
     <section className="case-workspace"><form className="panel case-form" onSubmit={save}>
       <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco poderão ser identificados na auditoria.</p></div></div>
@@ -208,11 +234,7 @@ function AuditPage({ apiStatus, user, onBack, onOpenCases, onOpenNonconformities
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível executar a auditoria.') } finally { setRunningId(null) }
   }
 
-  return <div className="app-shell"><aside className="sidebar">
-    <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
-    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item active" href="#audits"><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item" href="#nonconformities" onClick={(event) => { event.preventDefault(); onOpenNonconformities() }}><span aria-hidden="true">!</span> Não conformidades</a></nav>
-    <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>Auditor</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
-  </aside><main>
+  return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
     <header className="topbar"><div><p className="eyebrow">AUDITORIA AUTOMATIZADA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Avalie os campos essenciais e gere não conformidades automaticamente.</p></div></header>
     <section className="audit-workspace"><section className="panel audit-run"><div className="panel-header"><div><h2>Executar nova auditoria</h2><p>O checklist verifica objetivo, pré-condições, passos, dados, resultado e critério de aprovação.</p></div></div><div className="audit-case-list">{!loading && cases.length === 0 && <p className="empty-state">Cadastre um caso de teste antes de iniciar a auditoria.</p>}{cases.map((testCase) => <article className="audit-case" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Responsável da futura NC: {testCase.responsible_email}</p></div><button className="primary-button" type="button" disabled={runningId === testCase.id} onClick={() => void runAudit(testCase)}>{runningId === testCase.id ? 'Auditando…' : 'Auditar'}</button></article>)}</div>{message && <p className="case-message" role="status">{message}</p>}<ApiState status={apiStatus} /></section>
       <section className="panel audit-history"><div className="panel-header"><div><h2>Histórico</h2><p>{loading ? 'Carregando…' : `${audits.length} auditoria(s) realizada(s).`}</p></div></div><div className="audit-history-list">{!loading && audits.length === 0 && <p className="empty-state">Nenhuma auditoria realizada ainda.</p>}{audits.map((audit) => <article className="audit-summary" key={audit.id}><div><span className="case-code">{audit.test_case_code}</span><h3>{audit.test_case_title}</h3><p>{audit.auditor_name} · {audit.nonconformity_count} NC(s)</p><details><summary>Ver checklist</summary><ul>{audit.items.map((item) => <li key={item.checklist_code}><span className={item.result === 'CONFORMING' ? 'audit-result conforming' : 'audit-result nonconforming'}>{item.result === 'CONFORMING' ? 'Conforme' : 'NC'}</span>{item.checklist_label}</li>)}</ul></details></div><strong className="adherence-value">{audit.adherence_percentage ?? 0}%</strong></article>)}</div></section></section>
@@ -271,11 +293,7 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
   const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', RESOLVED: 'Resolvida' }
   const severityLabel: Record<NonconformityData['severity'], string> = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta' }
 
-  return <div className="app-shell"><aside className="sidebar">
-    <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
-    <nav aria-label="Navegação principal"><a className="nav-item" href="#dashboard" onClick={(event) => { event.preventDefault(); onBack() }}><span aria-hidden="true">◫</span> Visão geral</a><a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a><a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a><a className="nav-item active" href="#nonconformities"><span aria-hidden="true">!</span> Não conformidades</a></nav>
-    <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>Responsável</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
-  </aside><main>
+  return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} /><main>
     <header className="topbar"><div><p className="eyebrow">ACOMPANHAMENTO DE CORREÇÕES</p><h1>Não conformidades</h1><p className="subtitle">Envie evidências de correção, conteste uma NC ou valide o que foi entregue.</p>{message && <p className="case-message" role="status">{message}</p>}</div></header>
     <section className="nonconformity-list">
       {!loading && nonconformities.length === 0 && <section className="panel"><p className="empty-state">Nenhuma não conformidade atribuída à sua conta.</p></section>}
@@ -293,18 +311,8 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
 
 function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits, onOpenNonconformities }: { apiStatus: ApiStatus; user: CurrentUser; onLogout: () => void; onOpenCases: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void }) {
   const startAudit = () => { onOpenAudits() }
-  const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
 
-  return <div className="app-shell"><aside className="sidebar">
-    <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div>
-    <nav aria-label="Navegação principal">
-      <a className="nav-item active" href="#dashboard"><span aria-hidden="true">◫</span> Visão geral</a>
-      <a className="nav-item" href="#test-cases" onClick={(event) => { event.preventDefault(); onOpenCases() }}><span aria-hidden="true">≡</span> Casos de teste</a>
-      <a className="nav-item" href="#audits" onClick={(event) => { event.preventDefault(); onOpenAudits() }}><span aria-hidden="true">✓</span> Auditorias</a>
-      <a className="nav-item" href="#nonconformities" onClick={(event) => { event.preventDefault(); onOpenNonconformities() }}><span aria-hidden="true">!</span> Não conformidades</a>
-    </nav>
-    <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>{roleLabel}</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
-  </aside><main id="dashboard">
+  return <div className="app-shell"><Sidebar active="dashboard" user={user} onDashboard={() => undefined} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main id="dashboard">
     <header className="topbar"><div><p className="eyebrow">PROJETO CHECKOUT</p><h1>Visão geral da qualidade</h1><p className="subtitle">Acompanhe auditorias, aderência e correções dos casos de teste.</p></div><button className="primary-button" type="button" onClick={startAudit}><span aria-hidden="true">＋</span> Nova auditoria</button></header>
     <section className="metrics" aria-label="Indicadores">
       <article className="metric-card"><span className="metric-icon blue">≡</span><div><strong>12</strong><span>Casos de teste</span></div><small>3 adicionados nesta semana</small></article>
