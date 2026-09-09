@@ -51,10 +51,28 @@ function NavIcon({ name }: { name: PageName }) {
   return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v4M12 17h.01" /></svg>
 }
 
+function ConfirmationModal({ isOpen, title, description, confirmLabel, tone = 'primary', busy = false, onCancel, onConfirm }: {
+  isOpen: boolean; title: string; description: string; confirmLabel: string; tone?: 'primary' | 'danger'; busy?: boolean; onCancel: () => void; onConfirm: () => void
+}) {
+  if (!isOpen) return null
+  return <div className="modal-backdrop" role="presentation">
+    <section className="confirmation-modal" role="dialog" aria-modal="true" aria-labelledby="confirmation-title" aria-describedby="confirmation-description">
+      <div className={`modal-icon ${tone}`} aria-hidden="true">{tone === 'danger' ? '!' : '✓'}</div>
+      <h2 id="confirmation-title">{title}</h2>
+      <p id="confirmation-description">{description}</p>
+      <div className="modal-actions">
+        <button className="secondary-button" type="button" disabled={busy} onClick={onCancel}>Cancelar</button>
+        <button className={tone === 'danger' ? 'danger-solid-button' : 'primary-button'} type="button" disabled={busy} onClick={onConfirm}>{busy ? 'Aguarde…' : confirmLabel}</button>
+      </div>
+    </section>
+  </div>
+}
+
 function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
   active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
 }) {
   const [isOpen, setIsOpen] = useState(() => window.matchMedia('(min-width: 761px)').matches)
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
   const navigate = (callback: () => void) => (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
@@ -75,7 +93,11 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
         <a className={`nav-item ${active === 'audits' ? 'active' : ''}`} href="#audits" onClick={navigate(onAudits)}><NavIcon name="audits" /> Auditorias</a>
         <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><NavIcon name="nonconformities" /> Não conformidades</a>
       </nav>
-      <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>{roleLabel}</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
+      <div className="sidebar-footer">
+        <button className="account-menu-trigger" type="button" aria-expanded={accountMenuOpen} aria-label="Abrir opções da conta" onClick={() => setAccountMenuOpen((current) => !current)}><span className="avatar">{initials(user.full_name)}</span><span className="account-user-details"><strong>{user.full_name}</strong><span>{roleLabel}</span></span></button>
+        <button className="logout-button" onClick={onLogout} type="button">Sair</button>
+        {accountMenuOpen && <div className="account-menu"><strong>{user.full_name}</strong><span>{roleLabel}</span><button type="button" onClick={onLogout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}
+      </div>
     </aside>
   </>
 }
@@ -129,6 +151,7 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
+  const [caseToDelete, setCaseToDelete] = useState<TestCaseData | null>(null)
 
   const loadCases = async () => {
     setLoading(true)
@@ -188,9 +211,8 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível salvar.') } finally { setSaving(false) }
   }
   const remove = async (testCase: TestCaseData) => {
-    if (!window.confirm(`Excluir ${testCase.code} — ${testCase.title}?`)) return
     const response = await fetch(`/api/test-cases/${testCase.id}`, { method: 'DELETE', credentials: 'include' })
-    if (response.ok) { if (editingId === testCase.id) reset(); await loadCases(); setMessage('Caso de teste excluído.') }
+    if (response.ok) { if (editingId === testCase.id) reset(); await loadCases(); setMessage('Caso de teste excluído.'); setCaseToDelete(null) }
     else { const payload = await response.json().catch(() => ({})); setMessage(payload.detail || 'Não foi possível excluir.') }
   }
 
@@ -203,9 +225,10 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
       {message && <p className="case-message" role="status">{message}</p>}
     </form>
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${cases.length} caso(s) no banco compartilhado.`}</p></div></div>
-      <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Crie o primeiro usando o formulário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p></div><div className="case-summary-actions"><button className="text-button" type="button" onClick={() => edit(testCase)}>Editar</button><button className="danger-button" type="button" onClick={() => void remove(testCase)}>Excluir</button></div></article>)}</div>
+      <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Crie o primeiro usando o formulário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p></div><div className="case-summary-actions"><button className="text-button" type="button" onClick={() => edit(testCase)}>Editar</button><button className="danger-button" type="button" onClick={() => setCaseToDelete(testCase)}>Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
+    <ConfirmationModal isOpen={Boolean(caseToDelete)} title="Excluir caso de teste?" description={caseToDelete ? `Você removerá ${caseToDelete.code} — ${caseToDelete.title}. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir caso" tone="danger" onCancel={() => setCaseToDelete(null)} onConfirm={() => { if (caseToDelete) void remove(caseToDelete) }} />
   </main></div>
 }
 
@@ -254,6 +277,7 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState<string | null>(null)
   const [message, setMessage] = useState('')
+  const [reviewTarget, setReviewTarget] = useState<{ nonconformity: NonconformityData; evidence: EvidenceData; approved: boolean } | null>(null)
 
   const loadNonconformities = async () => {
     setLoading(true)
@@ -309,10 +333,11 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
         <p className="nc-meta">Responsável: {nonconformity.assignee_email} · Prazo: {nonconformity.due_date || 'não definido'}</p>
         {nonconformity.status !== 'RESOLVED' && (nonconformity.can_submit_evidence || nonconformity.can_review) && <button className="text-button" disabled={sending === nonconformity.id} type="button" onClick={() => void retryNotification(nonconformity)}>{sending === nonconformity.id ? 'Enviando…' : 'Reenviar e-mail'}</button>}
         {nonconformity.can_submit_evidence && nonconformity.status !== 'RESOLVED' && <div className="evidence-form"><textarea value={drafts[nonconformity.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [nonconformity.id]: event.target.value }))} placeholder="Descreva o que foi corrigido ou o motivo da contestação." /><div><button className="primary-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CORRECTION')}>Enviar correção</button><button className="text-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CONTESTATION')}>Contestar NC</button></div></div>}
-        <div className="evidence-list">{nonconformity.evidences.map((evidence) => <article className="evidence-item" key={evidence.id}><div><strong>{evidence.evidence_type === 'CORRECTION' ? 'Correção' : 'Contestação'} por {evidence.submitted_by_name}</strong><p>{evidence.description}</p></div><span className={`status ${evidence.status === 'APPROVED' ? 'success' : evidence.status === 'REJECTED' ? 'danger' : 'warning'}`}>{evidence.status === 'SUBMITTED' ? 'Pendente' : evidence.status === 'APPROVED' ? 'Aprovada' : 'Devolvida'}</span>{nonconformity.can_review && evidence.status === 'SUBMITTED' && <div className="review-actions"><button className="text-button" disabled={sending === nonconformity.id} type="button" onClick={() => void reviewEvidence(nonconformity, evidence, true)}>Aprovar</button><button className="danger-button" disabled={sending === nonconformity.id} type="button" onClick={() => void reviewEvidence(nonconformity, evidence, false)}>Devolver</button></div>}</article>)}</div>
+        <div className="evidence-list">{nonconformity.evidences.map((evidence) => <article className="evidence-item" key={evidence.id}><div><strong>{evidence.evidence_type === 'CORRECTION' ? 'Correção' : 'Contestação'} por {evidence.submitted_by_name}</strong><p>{evidence.description}</p></div><span className={`status ${evidence.status === 'APPROVED' ? 'success' : evidence.status === 'REJECTED' ? 'danger' : 'warning'}`}>{evidence.status === 'SUBMITTED' ? 'Pendente' : evidence.status === 'APPROVED' ? 'Aprovada' : 'Devolvida'}</span>{nonconformity.can_review && evidence.status === 'SUBMITTED' && <div className="review-actions"><button className="review-button approve" disabled={sending === nonconformity.id} type="button" onClick={() => setReviewTarget({ nonconformity, evidence, approved: true })}><span aria-hidden="true">✓</span> Aprovar correção</button><button className="review-button return" disabled={sending === nonconformity.id} type="button" onClick={() => setReviewTarget({ nonconformity, evidence, approved: false })}><span aria-hidden="true">↩</span> Devolver para correção</button></div>}</article>)}</div>
       </article>)}
       <ApiState status={apiStatus} />
     </section>
+    <ConfirmationModal isOpen={Boolean(reviewTarget)} title={reviewTarget?.approved ? 'Aprovar correção?' : 'Devolver para correção?'} description={reviewTarget?.approved ? 'Ao aprovar, a não conformidade será marcada como resolvida.' : 'A evidência será devolvida ao responsável para que ele possa corrigir ou complementar a entrega.'} confirmLabel={reviewTarget?.approved ? 'Aprovar e resolver NC' : 'Devolver evidência'} tone={reviewTarget?.approved ? 'primary' : 'danger'} busy={sending === reviewTarget?.nonconformity.id} onCancel={() => setReviewTarget(null)} onConfirm={() => { if (reviewTarget) { void reviewEvidence(reviewTarget.nonconformity, reviewTarget.evidence, reviewTarget.approved).finally(() => setReviewTarget(null)) } }} />
   </main></div>
 }
 
