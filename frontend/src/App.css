@@ -407,6 +407,7 @@ h1 {
 .secondary-button:disabled,
 .danger-solid-button:disabled,
 .review-button:disabled,
+.case-action-button:disabled,
 .add-step-button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -417,6 +418,7 @@ h1 {
 .secondary-button:focus-visible,
 .danger-solid-button:focus-visible,
 .review-button:focus-visible,
+.case-action-button:focus-visible,
 .nav-item:focus-visible,
 .logout-button:focus-visible,
 .danger-button:focus-visible,
@@ -451,21 +453,21 @@ textarea:focus-visible {
 .metric-card > div {
   display: flex;
   flex-direction: column;
-  margin-top: 15px;
+  gap: 8px;
+  margin-top: 12px;
 }
 
 .metric-card strong {
   color: var(--navy);
-  font-size: 28px;
+  font-size: 32px;
   line-height: 1;
   letter-spacing: -0.03em;
 }
 
 .metric-card div span {
-  margin-top: 6px;
   color: #4e5c73;
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .metric-card small {
@@ -1210,8 +1212,39 @@ td strong {
 .case-summary-actions {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
+  gap: 8px;
 }
+
+.case-action-button {
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 800;
+  transition: 160ms ease;
+}
+
+.case-action-button.edit {
+  border-color: #a7d5b3;
+  color: #0f5a2a;
+  background: #e9f7ed;
+}
+
+.case-action-button.edit:hover { border-color: #4fa36b; background: #d9f0df; }
+
+.case-action-button.delete {
+  border-color: #edb7c0;
+  color: #9b1c32;
+  background: #fff0f2;
+}
+
+.case-action-button.delete:hover { border-color: #d66c7c; background: #ffe1e6; }
 
 .danger-button {
   border: 0;
