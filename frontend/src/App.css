@@ -15,6 +15,10 @@
   --red-soft: #fff0f2;
   --warning: #8a5211;
   --warning-soft: #fff4dc;
+  --info: #155e75;
+  --info-soft: #e7f5f8;
+  --contested: #6d3c8c;
+  --contested-soft: #f4ecfb;
 }
 
 .app-shell {
@@ -122,7 +126,7 @@
 .brand span:last-child,
 .sidebar-footer span {
   color: #a9c0ae;
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 2px;
 }
 
@@ -344,7 +348,7 @@ main {
 .eyebrow {
   margin: 0 0 7px;
   color: var(--primary);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
 }
@@ -422,6 +426,7 @@ h1 {
 .nav-item:focus-visible,
 .logout-button:focus-visible,
 .danger-button:focus-visible,
+summary:focus-visible,
 input:focus-visible,
 textarea:focus-visible {
   outline: 3px solid rgba(20, 83, 45, 0.32);
@@ -474,7 +479,7 @@ textarea:focus-visible {
   display: block;
   margin-top: 14px;
   color: #8a96aa;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .metric-card small.positive {
@@ -518,7 +523,7 @@ textarea:focus-visible {
 
 .panel-header h2 {
   margin-bottom: 5px;
-  font-size: 16px;
+  font-size: 18px;
 }
 
 .panel-header h2,
@@ -531,7 +536,7 @@ textarea:focus-visible {
 
 .panel-header p {
   margin-bottom: 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .text-button {
@@ -561,6 +566,13 @@ textarea:focus-visible {
 
 .secondary-button:hover { background: #f1f6f2; }
 
+.secondary-compact {
+  min-height: 36px;
+  margin-top: 14px;
+  padding-inline: 11px;
+  font-size: 12px;
+}
+
 .danger-solid-button {
   border: 1px solid #a9233b;
   color: white;
@@ -577,7 +589,7 @@ textarea:focus-visible {
 table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 th,
@@ -591,7 +603,7 @@ td {
 th {
   color: #8994a8;
   background: #fafbfc;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -604,13 +616,13 @@ td:first-child {
 
 .case-code {
   color: var(--primary);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 800;
 }
 
 td strong {
   color: #253a2b;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .progress-row {
@@ -638,13 +650,15 @@ td strong {
   display: inline-flex;
   padding: 5px 8px;
   border-radius: 999px;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 750;
 }
 
 .status.success { color: var(--green); background: var(--green-soft); }
 .status.danger { color: var(--red); background: var(--red-soft); }
 .status.warning { color: var(--warning); background: var(--warning-soft); }
+.status.info { color: var(--info); background: var(--info-soft); }
+.status.contested { color: var(--contested); background: var(--contested-soft); }
 
 .action-list {
   list-style: none;
@@ -670,13 +684,13 @@ td strong {
 
 .action-list strong {
   color: #334057;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .action-list span:not(.action-dot) {
   overflow: hidden;
   color: #8a95a7;
-  font-size: 10px;
+  font-size: 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -705,7 +719,7 @@ td strong {
   border-radius: 9px;
   color: #526657;
   background: var(--surface-muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 650;
 }
 
@@ -797,7 +811,7 @@ td strong {
   display: grid;
   gap: 7px;
   color: #344a3a;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
 }
 
@@ -808,6 +822,8 @@ td strong {
   border: 1px solid #dbe2ed;
   border-radius: 9px;
   color: var(--navy);
+  font: inherit;
+  font-size: 15px;
   background: white;
   outline: none;
 }
@@ -916,7 +932,7 @@ td strong {
 .audit-summary p {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .audit-case .primary-button {
@@ -937,7 +953,7 @@ td strong {
 .audit-summary details {
   margin-top: 10px;
   color: var(--primary);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
 }
 
@@ -947,7 +963,7 @@ td strong {
   margin: 9px 0 0;
   padding: 0;
   color: #526078;
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   list-style: none;
 }
@@ -963,7 +979,7 @@ td strong {
   padding: 3px 5px;
   border-radius: 999px;
   text-align: center;
-  font-size: 9px;
+  font-size: 11px;
 }
 
 .audit-result.conforming { color: var(--green); background: var(--green-soft); }
@@ -995,7 +1011,7 @@ td strong {
 .evidence-item p {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .nc-badges,
@@ -1021,7 +1037,7 @@ td strong {
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   transition: 160ms ease;
 }
@@ -1044,7 +1060,7 @@ td strong {
 
 .nc-meta {
   margin-top: 14px;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .evidence-form {
@@ -1063,6 +1079,7 @@ td strong {
   border-radius: 9px;
   color: var(--navy);
   font: inherit;
+  font-size: 15px;
   outline: none;
   resize: vertical;
 }
@@ -1092,7 +1109,7 @@ td strong {
   display: block;
   margin-bottom: 3px;
   color: #344a3a;
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .case-form,
@@ -1110,7 +1127,7 @@ td strong {
   display: grid;
   gap: 7px;
   color: #344a3a;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 750;
 }
 
@@ -1122,6 +1139,8 @@ td strong {
   padding: 10px 12px;
   color: var(--navy);
   background: var(--surface);
+  font: inherit;
+  font-size: 15px;
   outline: none;
 }
 
@@ -1138,7 +1157,7 @@ td strong {
 
 .field-hint {
   color: var(--muted);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
 }
 
@@ -1206,7 +1225,7 @@ td strong {
 .empty-state {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 13px;
 }
 
 .case-summary-actions {
@@ -1225,7 +1244,7 @@ td strong {
   border-radius: 8px;
   cursor: pointer;
   font: inherit;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 800;
   transition: 160ms ease;
 }
