@@ -660,6 +660,18 @@ td strong {
 .status.info { color: var(--info); background: var(--info-soft); }
 .status.contested { color: var(--contested); background: var(--contested-soft); }
 
+.priority {
+  display: inline-flex;
+  padding: 5px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.priority.low { color: #475569; background: #eef2f6; }
+.priority.medium { color: #2457a6; background: #eaf1ff; }
+.priority.high { color: #7c2d12; background: #fff0e8; }
+
 .action-list {
   list-style: none;
   margin: 0;
