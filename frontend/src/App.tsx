@@ -87,12 +87,16 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
 function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
   active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
 }) {
-  const [isOpen, setIsOpen] = useState(() => window.matchMedia('(min-width: 761px)').matches)
+  const [isOpen, setIsOpen] = useState(() => {
+    const savedState = window.sessionStorage.getItem('testcheck-sidebar-open')
+    return savedState === null ? window.matchMedia('(min-width: 761px)').matches : savedState === 'true'
+  })
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
   const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
+  useEffect(() => { window.sessionStorage.setItem('testcheck-sidebar-open', String(isOpen)) }, [isOpen])
   const navigate = (callback: () => void) => (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
-    setIsOpen(false)
+    if (!window.matchMedia('(min-width: 761px)').matches) setIsOpen(false)
     callback()
   }
 
