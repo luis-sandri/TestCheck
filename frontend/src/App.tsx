@@ -44,6 +44,13 @@ function ApiState({ status }: { status: ApiStatus }) {
   </div>
 }
 
+function NavIcon({ name }: { name: PageName }) {
+  if (name === 'dashboard') return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><rect x="14" y="14" width="7" height="7" rx="1" /></svg>
+  if (name === 'test-cases') return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M9 8h6M9 12h6M9 16h3M7.5 8h.01M7.5 12h.01M7.5 16h.01" /></svg>
+  if (name === 'audits') return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 19 6v5c0 4.6-3 7.9-7 10-4-2.1-7-5.4-7-10V6l7-3Z" /><path d="m9 12 2 2 4-4" /></svg>
+  return <svg className="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2.8 20h18.4L12 3Z" /><path d="M12 9v4M12 17h.01" /></svg>
+}
+
 function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
   active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
 }) {
@@ -63,10 +70,10 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
     <aside className={`sidebar ${isOpen ? 'is-open' : 'is-collapsed'}`} id="main-navigation">
       <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div><button className="sidebar-toggle" type="button" aria-expanded={isOpen} aria-label={isOpen ? 'Recolher menu' : 'Expandir menu'} onClick={() => setIsOpen((current) => !current)}>{isOpen ? '×' : '☰'}</button></div>
       <nav aria-label="Navegação principal">
-        <a className={`nav-item ${active === 'dashboard' ? 'active' : ''}`} href="#dashboard" onClick={navigate(onDashboard)}><span aria-hidden="true">◫</span> Visão geral</a>
-        <a className={`nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><span aria-hidden="true">≡</span> Casos de teste</a>
-        <a className={`nav-item ${active === 'audits' ? 'active' : ''}`} href="#audits" onClick={navigate(onAudits)}><span aria-hidden="true">✓</span> Auditorias</a>
-        <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><span aria-hidden="true">!</span> Não conformidades</a>
+        <a className={`nav-item ${active === 'dashboard' ? 'active' : ''}`} href="#dashboard" onClick={navigate(onDashboard)}><NavIcon name="dashboard" /> Visão geral</a>
+        <a className={`nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><NavIcon name="test-cases" /> Casos de teste</a>
+        <a className={`nav-item ${active === 'audits' ? 'active' : ''}`} href="#audits" onClick={navigate(onAudits)}><NavIcon name="audits" /> Auditorias</a>
+        <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><NavIcon name="nonconformities" /> Não conformidades</a>
       </nav>
       <div className="sidebar-footer"><div className="avatar">{initials(user.full_name)}</div><div><strong>{user.full_name}</strong><span>{roleLabel}</span></div><button className="logout-button" onClick={onLogout} type="button">Sair</button></div>
     </aside>
