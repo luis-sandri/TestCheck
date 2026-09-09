@@ -708,8 +708,10 @@ td strong {
 }
 
 .action-list b {
+  min-width: 56px;
   color: #67748a;
-  font-size: 10px;
+  font-size: 12px;
+  text-align: right;
 }
 
 .action-dot {
