@@ -1222,6 +1222,75 @@ td strong {
   font-weight: 700;
 }
 
+.toast-notification {
+  position: fixed;
+  z-index: 110;
+  right: 24px;
+  bottom: 24px;
+  width: min(400px, calc(100vw - 32px));
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 13px 14px;
+  border: 1px solid #b8dfc2;
+  border-radius: 12px;
+  color: #155c2d;
+  background: #f2fbf4;
+  box-shadow: 0 14px 32px rgba(16, 55, 28, 0.18);
+  animation: toast-in 180ms ease-out;
+}
+
+.toast-notification.error {
+  border-color: #f0b4bf;
+  color: #9e1e35;
+  background: #fff4f5;
+}
+
+.toast-icon {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  color: white;
+  background: #267944;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.toast-notification.error .toast-icon { background: var(--red); }
+
+.toast-notification p {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.toast-notification button {
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  color: currentColor;
+  background: transparent;
+  font-size: 19px;
+  line-height: 1;
+}
+
+.toast-notification button:hover { background: rgba(21, 92, 45, 0.1); }
+.toast-notification.error button:hover { background: rgba(180, 35, 61, 0.1); }
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 .modal-backdrop {
   position: fixed;
   z-index: 100;
@@ -1365,6 +1434,7 @@ textarea::placeholder {
   .metric-card { min-height: 130px; }
   th, td { padding-inline: 16px; }
   .evidence-item { grid-template-columns: 1fr; }
+  .toast-notification { right: 16px; bottom: 16px; }
 }
 
 @media (max-width: 580px) {

@@ -68,6 +68,22 @@ function ConfirmationModal({ isOpen, title, description, confirmLabel, tone = 'p
   </div>
 }
 
+function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  useEffect(() => {
+    if (!message) return
+    const timeout = window.setTimeout(onDismiss, 4500)
+    return () => window.clearTimeout(timeout)
+  }, [message, onDismiss])
+
+  if (!message) return null
+  const isError = /não foi possível|recusou|descreva/i.test(message)
+  return <div className={`toast-notification ${isError ? 'error' : 'success'}`} role="status" aria-live="polite">
+    <span className="toast-icon" aria-hidden="true">{isError ? '!' : '✓'}</span>
+    <p>{message}</p>
+    <button type="button" aria-label="Fechar aviso" onClick={onDismiss}>×</button>
+  </div>
+}
+
 function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
   active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
 }) {
@@ -222,13 +238,13 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
       <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco poderão ser identificados na auditoria.</p></div></div>
       <div className="form-fields"><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pela correção * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
       <div className="form-actions"><button className="text-button" type="button" onClick={reset}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
-      {message && <p className="case-message" role="status">{message}</p>}
     </form>
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${cases.length} caso(s) no banco compartilhado.`}</p></div></div>
       <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Crie o primeiro usando o formulário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p></div><div className="case-summary-actions"><button className="text-button" type="button" onClick={() => edit(testCase)}>Editar</button><button className="danger-button" type="button" onClick={() => setCaseToDelete(testCase)}>Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
     <ConfirmationModal isOpen={Boolean(caseToDelete)} title="Excluir caso de teste?" description={caseToDelete ? `Você removerá ${caseToDelete.code} — ${caseToDelete.title}. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir caso" tone="danger" onCancel={() => setCaseToDelete(null)} onConfirm={() => { if (caseToDelete) void remove(caseToDelete) }} />
+    <Toast message={message} onDismiss={() => setMessage('')} />
   </main></div>
 }
 
@@ -266,8 +282,9 @@ function AuditPage({ apiStatus, user, onBack, onOpenCases, onOpenNonconformities
 
   return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
     <header className="topbar"><div><p className="eyebrow">AUDITORIA AUTOMATIZADA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Avalie os campos essenciais e gere não conformidades automaticamente.</p></div></header>
-    <section className="audit-workspace"><section className="panel audit-run"><div className="panel-header"><div><h2>Executar nova auditoria</h2><p>O checklist verifica objetivo, pré-condições, passos, dados, resultado e critério de aprovação.</p></div></div><div className="audit-case-list">{!loading && cases.length === 0 && <p className="empty-state">Cadastre um caso de teste antes de iniciar a auditoria.</p>}{cases.map((testCase) => <article className="audit-case" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Responsável da futura NC: {testCase.responsible_email}</p></div><button className="primary-button" type="button" disabled={runningId === testCase.id} onClick={() => void runAudit(testCase)}>{runningId === testCase.id ? 'Auditando…' : 'Auditar'}</button></article>)}</div>{message && <p className="case-message" role="status">{message}</p>}<ApiState status={apiStatus} /></section>
+    <section className="audit-workspace"><section className="panel audit-run"><div className="panel-header"><div><h2>Executar nova auditoria</h2><p>O checklist verifica objetivo, pré-condições, passos, dados, resultado e critério de aprovação.</p></div></div><div className="audit-case-list">{!loading && cases.length === 0 && <p className="empty-state">Cadastre um caso de teste antes de iniciar a auditoria.</p>}{cases.map((testCase) => <article className="audit-case" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Responsável da futura NC: {testCase.responsible_email}</p></div><button className="primary-button" type="button" disabled={runningId === testCase.id} onClick={() => void runAudit(testCase)}>{runningId === testCase.id ? 'Auditando…' : 'Auditar'}</button></article>)}</div><ApiState status={apiStatus} /></section>
       <section className="panel audit-history"><div className="panel-header"><div><h2>Histórico</h2><p>{loading ? 'Carregando…' : `${audits.length} auditoria(s) realizada(s).`}</p></div></div><div className="audit-history-list">{!loading && audits.length === 0 && <p className="empty-state">Nenhuma auditoria realizada ainda.</p>}{audits.map((audit) => <article className="audit-summary" key={audit.id}><div><span className="case-code">{audit.test_case_code}</span><h3>{audit.test_case_title}</h3><p>{audit.auditor_name} · {audit.nonconformity_count} NC(s)</p><details><summary>Ver checklist</summary><ul>{audit.items.map((item) => <li key={item.checklist_code}><span className={item.result === 'CONFORMING' ? 'audit-result conforming' : 'audit-result nonconforming'}>{item.result === 'CONFORMING' ? 'Conforme' : 'NC'}</span>{item.checklist_label}</li>)}</ul></details></div><strong className="adherence-value">{audit.adherence_percentage ?? 0}%</strong></article>)}</div></section></section>
+    <Toast message={message} onDismiss={() => setMessage('')} />
   </main></div>
 }
 
@@ -325,7 +342,7 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
   const severityLabel: Record<NonconformityData['severity'], string> = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta' }
 
   return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} /><main>
-    <header className="topbar"><div><p className="eyebrow">ACOMPANHAMENTO DE CORREÇÕES</p><h1>Não conformidades</h1><p className="subtitle">Envie evidências de correção, conteste uma NC ou valide o que foi entregue.</p>{message && <p className="case-message" role="status">{message}</p>}</div></header>
+    <header className="topbar"><div><p className="eyebrow">ACOMPANHAMENTO DE CORREÇÕES</p><h1>Não conformidades</h1><p className="subtitle">Envie evidências de correção, conteste uma NC ou valide o que foi entregue.</p></div></header>
     <section className="nonconformity-list">
       {!loading && nonconformities.length === 0 && <section className="panel"><p className="empty-state">Nenhuma não conformidade atribuída à sua conta.</p></section>}
       {nonconformities.map((nonconformity) => <article className="panel nonconformity-card" key={nonconformity.id}>
@@ -338,6 +355,7 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
       <ApiState status={apiStatus} />
     </section>
     <ConfirmationModal isOpen={Boolean(reviewTarget)} title={reviewTarget?.approved ? 'Aprovar correção?' : 'Devolver para correção?'} description={reviewTarget?.approved ? 'Ao aprovar, a não conformidade será marcada como resolvida.' : 'A evidência será devolvida ao responsável para que ele possa corrigir ou complementar a entrega.'} confirmLabel={reviewTarget?.approved ? 'Aprovar e resolver NC' : 'Devolver evidência'} tone={reviewTarget?.approved ? 'primary' : 'danger'} busy={sending === reviewTarget?.nonconformity.id} onCancel={() => setReviewTarget(null)} onConfirm={() => { if (reviewTarget) { void reviewEvidence(reviewTarget.nonconformity, reviewTarget.evidence, reviewTarget.approved).finally(() => setReviewTarget(null)) } }} />
+    <Toast message={message} onDismiss={() => setMessage('')} />
   </main></div>
 }
 
