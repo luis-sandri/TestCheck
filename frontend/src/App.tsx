@@ -26,12 +26,6 @@ const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
   title: '', responsible_email: responsibleEmail, description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
 })
 
-const testCases = [
-  { code: 'TC-014', title: 'Login com senha incorreta', author: 'André Murilo', adherence: 67, status: 'Não conforme', tone: 'danger' },
-  { code: 'TC-013', title: 'Recuperação de acesso', author: 'Marcelo Bellon', adherence: 100, status: 'Conforme', tone: 'success' },
-  { code: 'TC-012', title: 'Cadastro com e-mail existente', author: 'Matheus Pamplona', adherence: 83, status: 'Em correção', tone: 'warning' },
-]
-
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 }
@@ -368,18 +362,69 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
 }
 
 function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits, onOpenNonconformities }: { apiStatus: ApiStatus; user: CurrentUser; onLogout: () => void; onOpenCases: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void }) {
-  const startAudit = () => { onOpenAudits() }
+  const [cases, setCases] = useState<TestCaseData[]>([])
+  const [audits, setAudits] = useState<AuditData[]>([])
+  const [nonconformities, setNonconformities] = useState<NonconformityData[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const loadDashboard = async () => {
+      setLoading(true)
+      try {
+        const [casesResponse, auditsResponse, nonconformitiesResponse] = await Promise.all([
+          fetch('/api/test-cases', { credentials: 'include' }),
+          fetch('/api/audits', { credentials: 'include' }),
+          fetch('/api/nonconformities', { credentials: 'include' }),
+        ])
+        if (!casesResponse.ok || !auditsResponse.ok || !nonconformitiesResponse.ok) throw new Error()
+        setCases(await casesResponse.json() as TestCaseData[])
+        setAudits(await auditsResponse.json() as AuditData[])
+        setNonconformities(await nonconformitiesResponse.json() as NonconformityData[])
+      } finally { setLoading(false) }
+    }
+    void loadDashboard()
+  }, [])
+
+  const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', RESOLVED: 'Resolvida' }
+  const statusTone: Record<NonconformityData['status'], string> = { OPEN: 'danger', IN_CORRECTION: 'warning', WAITING_VALIDATION: 'info', CONTESTED: 'contested', RESOLVED: 'success' }
+  const latestNonconformityByCase = new Map(nonconformities.map((nonconformity) => [nonconformity.test_case_code, nonconformity]))
+  const recentAudits = audits.slice(0, 3)
+  const openNonconformities = nonconformities.filter((nonconformity) => nonconformity.status !== 'RESOLVED')
+  const averageAdherence = audits.length ? Math.round(audits.reduce((total, audit) => total + (audit.adherence_percentage ?? 0), 0) / audits.length) : null
+  const auditedCaseIds = new Set(audits.map((audit) => audit.test_case_id))
+  const casesWithoutAudit = cases.filter((testCase) => !auditedCaseIds.has(testCase.id)).length
+  const dueLabel = (dueDate: string | null) => {
+    if (!dueDate) return 'Sem prazo'
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const due = new Date(`${dueDate}T00:00:00`)
+    const days = Math.round((due.getTime() - today.getTime()) / 86_400_000)
+    if (days < 0) return 'Atrasada'
+    if (days === 0) return 'Hoje'
+    if (days === 1) return 'Amanhã'
+    return `Em ${days} dias`
+  }
+  const actions = [
+    ...openNonconformities.map((nonconformity) => ({
+      id: nonconformity.id,
+      title: nonconformity.status === 'WAITING_VALIDATION' ? `${nonconformity.code} aguarda validação` : `${nonconformity.code} ${statusLabel[nonconformity.status].toLowerCase()}`,
+      description: `${nonconformity.test_case_code} · ${nonconformity.test_case_title}`,
+      meta: dueLabel(nonconformity.due_date),
+      tone: nonconformity.status === 'WAITING_VALIDATION' ? 'violet' : 'red',
+    })),
+    ...(casesWithoutAudit ? [{ id: 'cases-without-audit', title: 'Casos sem auditoria', description: 'Aguardam a primeira verificação.', meta: `${casesWithoutAudit} caso${casesWithoutAudit === 1 ? '' : 's'}`, tone: 'blue' }] : []),
+  ].slice(0, 3)
 
   return <div className="app-shell"><Sidebar active="dashboard" user={user} onDashboard={() => undefined} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main id="dashboard">
-    <header className="topbar"><div><p className="eyebrow">PROJETO CHECKOUT</p><h1>Visão geral da qualidade</h1><p className="subtitle">Acompanhe auditorias, aderência e correções dos casos de teste.</p></div><button className="primary-button" type="button" onClick={startAudit}><span aria-hidden="true">＋</span> Nova auditoria</button></header>
+    <header className="topbar"><div><p className="eyebrow">PROJETO CHECKOUT</p><h1>Visão geral da qualidade</h1><p className="subtitle">Acompanhe auditorias, aderência e correções dos casos de teste.</p></div><button className="primary-button" type="button" onClick={onOpenAudits}><span aria-hidden="true">＋</span> Nova auditoria</button></header>
     <section className="metrics" aria-label="Indicadores">
-      <article className="metric-card"><span className="metric-icon blue">≡</span><div><span>Casos de teste</span><strong>12</strong></div><small>3 adicionados nesta semana</small></article>
-      <article className="metric-card"><span className="metric-icon violet">✓</span><div><span>Auditorias pendentes</span><strong>4</strong></div><small>2 com prazo próximo</small></article>
-      <article className="metric-card"><span className="metric-icon red">!</span><div><span>NCs abertas</span><strong>3</strong></div><small>1 aguardando validação</small></article>
-      <article className="metric-card"><span className="metric-icon green">↗</span><div><span>Aderência média</span><strong>86%</strong></div><small className="positive">+8% desde a última rodada</small></article>
+      <article className="metric-card"><span className="metric-icon blue">≡</span><div><span>Casos de teste</span><strong>{loading ? '—' : cases.length}</strong></div><small>{loading ? 'Carregando…' : cases.length ? `${cases.length} caso${cases.length === 1 ? '' : 's'} cadastrado${cases.length === 1 ? '' : 's'}` : 'Nenhum caso cadastrado'}</small></article>
+      <article className="metric-card"><span className="metric-icon violet">✓</span><div><span>Auditorias realizadas</span><strong>{loading ? '—' : audits.length}</strong></div><small>{loading ? 'Carregando…' : audits.length ? `${audits.length} registro${audits.length === 1 ? '' : 's'} concluído${audits.length === 1 ? '' : 's'}` : 'Nenhuma auditoria realizada'}</small></article>
+      <article className="metric-card"><span className="metric-icon red">!</span><div><span>NCs abertas</span><strong>{loading ? '—' : openNonconformities.length}</strong></div><small>{loading ? 'Carregando…' : openNonconformities.length ? `${openNonconformities.length} requer${openNonconformities.length === 1 ? '' : 'em'} ação` : 'Nenhuma pendência aberta'}</small></article>
+      <article className="metric-card"><span className="metric-icon green">↗</span><div><span>Aderência média</span><strong>{loading ? '—' : averageAdherence === null ? '—' : `${averageAdherence}%`}</strong></div><small className="positive">{loading ? 'Carregando…' : averageAdherence === null ? 'Sem auditorias concluídas' : 'Média das auditorias realizadas'}</small></article>
     </section>
-    <section className="content-grid"><article className="panel cases-panel" id="test-cases"><div className="panel-header"><div><h2>Casos auditados recentemente</h2><p>Últimos artefatos avaliados pela equipe.</p></div><button className="text-button" type="button" onClick={onOpenCases}>Ver todos →</button></div><div className="table-wrap"><table><thead><tr><th>Caso de teste</th><th>Responsável</th><th>Aderência</th><th>Estado</th></tr></thead><tbody>{testCases.map((testCase) => <tr key={testCase.code}><td><span className="case-code">{testCase.code}</span><strong>{testCase.title}</strong></td><td>{testCase.author}</td><td><div className="progress-row"><span className="progress-track"><span style={{ width: `${testCase.adherence}%` }} /></span><strong>{testCase.adherence}%</strong></div></td><td><span className={`status ${testCase.tone}`}>{testCase.status}</span></td></tr>)}</tbody></table></div></article>
-      <aside className="panel next-panel"><div className="panel-header"><div><h2>Próximas ações</h2><p>Itens que precisam de atenção.</p></div></div><ul className="action-list"><li><span className="action-dot red" /><div><strong>NC-002 vence amanhã</strong><span>Dados de teste não informados</span></div><b>Amanhã</b></li><li><span className="action-dot violet" /><div><strong>Correção para validar</strong><span>TC-012 · Cadastro duplicado</span></div><b>Hoje</b></li><li><span className="action-dot blue" /><div><strong>Casos sem auditoria</strong><span>Projeto Portal Acadêmico</span></div><b>4 casos</b></li></ul><ApiState status={apiStatus} /></aside>
+    <section className="content-grid"><article className="panel cases-panel" id="test-cases"><div className="panel-header"><div><h2>Auditorias recentes</h2><p>Últimos casos de teste verificados pela equipe.</p></div><button className="text-button" type="button" onClick={onOpenCases}>Ver todos →</button></div><div className="table-wrap"><table><thead><tr><th>Caso de teste</th><th>Auditor</th><th>Aderência</th><th>Estado</th></tr></thead><tbody>{loading ? <tr><td colSpan={4}><p className="empty-state">Carregando auditorias…</p></td></tr> : recentAudits.length === 0 ? <tr><td colSpan={4}><p className="empty-state">Nenhuma auditoria realizada ainda.</p></td></tr> : recentAudits.map((audit) => { const nonconformity = latestNonconformityByCase.get(audit.test_case_code); const tone = nonconformity ? statusTone[nonconformity.status] : audit.nonconformity_count ? 'danger' : 'success'; const label = nonconformity ? statusLabel[nonconformity.status] : audit.nonconformity_count ? 'Não conforme' : 'Conforme'; return <tr key={audit.id}><td><span className="case-code">{audit.test_case_code}</span><strong>{audit.test_case_title}</strong></td><td>{audit.auditor_name}</td><td><div className="progress-row"><span className="progress-track"><span style={{ width: `${audit.adherence_percentage ?? 0}%` }} /></span><strong>{audit.adherence_percentage ?? 0}%</strong></div></td><td><span className={`status ${tone}`}>{label}</span></td></tr> })}</tbody></table></div></article>
+      <aside className="panel next-panel"><div className="panel-header"><div><h2>Próximas ações</h2><p>Itens que precisam de atenção.</p></div></div><ul className="action-list">{loading ? <li><div><strong>Carregando ações…</strong><span>Consultando os dados da equipe.</span></div></li> : actions.length === 0 ? <li><div><strong>Nenhuma ação pendente</strong><span>Não há NCs abertas ou casos aguardando auditoria.</span></div></li> : actions.map((action) => <li key={action.id}><span className={`action-dot ${action.tone}`} /><div><strong>{action.title}</strong><span>{action.description}</span></div><b>{action.meta}</b></li>)}</ul><ApiState status={apiStatus} /></aside>
     </section>
   </main></div>
 }

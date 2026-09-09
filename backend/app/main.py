@@ -63,39 +63,3 @@ def database_health_check() -> dict[str, str]:
     """
     ensure_database_ready()
     return {"status": "ok", "database": "connected", "schema": "ready"}
-
-
-@app.get("/dashboard", tags=["Dashboard"])
-def dashboard_summary() -> dict[str, object]:
-    """Dados demonstrativos até a persistência das auditorias ser implementada."""
-    return {
-        "metrics": {
-            "test_cases": 12,
-            "pending_audits": 4,
-            "open_nonconformities": 3,
-            "average_adherence": 86,
-        },
-        "recent_cases": [
-            {
-                "code": "TC-014",
-                "title": "Login com senha incorreta",
-                "author": "André Murilo",
-                "adherence": 67,
-                "status": "Não conforme",
-            },
-            {
-                "code": "TC-013",
-                "title": "Recuperação de acesso",
-                "author": "Marcelo Bellon",
-                "adherence": 100,
-                "status": "Conforme",
-            },
-            {
-                "code": "TC-012",
-                "title": "Cadastro com e-mail existente",
-                "author": "Matheus Pamplona",
-                "adherence": 83,
-                "status": "Em correção",
-            },
-        ],
-    }
