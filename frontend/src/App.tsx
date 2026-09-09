@@ -69,15 +69,17 @@ function ConfirmationModal({ isOpen, title, description, confirmLabel, tone = 'p
 }
 
 function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
+  const [isLeaving, setIsLeaving] = useState(false)
   useEffect(() => {
     if (!message) return
-    const timeout = window.setTimeout(onDismiss, 4500)
+    setIsLeaving(false)
+    const timeout = window.setTimeout(() => setIsLeaving(true), 5000)
     return () => window.clearTimeout(timeout)
   }, [message, onDismiss])
 
   if (!message) return null
   const isError = /não foi possível|recusou|descreva/i.test(message)
-  return <div className={`toast-notification ${isError ? 'error' : 'success'}`} role="status" aria-live="polite">
+  return <div className={`toast-notification ${isError ? 'error' : 'success'} ${isLeaving ? 'is-leaving' : ''}`} role="status" aria-live="polite" onAnimationEnd={() => { if (isLeaving) onDismiss() }}>
     <span className="toast-icon" aria-hidden="true">{isError ? '!' : '✓'}</span>
     <p>{message}</p>
     <button type="button" aria-label="Fechar aviso" onClick={onDismiss}>×</button>
