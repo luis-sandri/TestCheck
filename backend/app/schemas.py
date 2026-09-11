@@ -51,6 +51,7 @@ class UserOutput(BaseModel):
 
 class TestCaseInput(BaseModel):
     title: str = Field(min_length=3, max_length=180)
+    scenario_id: str | None = Field(default=None, max_length=36)
     responsible_email: str = Field(default="", max_length=255)
     description: str = Field(default="", max_length=10_000)
     preconditions: str = Field(default="", max_length=10_000)
@@ -95,6 +96,8 @@ class TestCaseOutput(BaseModel):
     author_id: str
     author_name: str
     responsible_email: str
+    scenario_id: str | None
+    scenario_name: str | None
     created_at: datetime
     updated_at: datetime
 
@@ -107,6 +110,8 @@ class AuditItemOutput(BaseModel):
     checklist_code: str
     checklist_label: str
     result: ChecklistResult | None
+    suggested_result: ChecklistResult | None
+    final_result: ChecklistResult | None
     note: str | None
 
 
@@ -122,6 +127,17 @@ class AuditOutput(BaseModel):
     items: list[AuditItemOutput]
     created_at: datetime
     completed_at: datetime | None
+    can_review: bool
+
+
+class AuditReviewItemInput(BaseModel):
+    checklist_code: str = Field(min_length=1, max_length=40)
+    result: ChecklistResult
+    priority: NonconformitySeverity | None = None
+
+
+class AuditReviewInput(BaseModel):
+    items: list[AuditReviewItemInput] = Field(min_length=1)
 
 
 class EvidenceInput(BaseModel):
@@ -157,6 +173,16 @@ class EvidenceOutput(BaseModel):
     reviewer_comment: str | None
 
 
+class NonconformityHistoryOutput(BaseModel):
+    id: str
+    actor_email: str | None
+    event_type: str
+    previous_status: str | None
+    new_status: str | None
+    message: str
+    created_at: datetime
+
+
 class NonconformityOutput(BaseModel):
     id: str
     code: str
@@ -167,6 +193,39 @@ class NonconformityOutput(BaseModel):
     status: NonconformityStatus
     due_date: str | None
     assignee_email: str | None
+    supervisor_email: str | None
+    resolution_due_at: datetime | None
+    review_due_at: datetime | None
+    escalation_due_at: datetime | None
+    escalated_at: datetime | None
+    final_decision: str | None
     can_submit_evidence: bool
     can_review: bool
+    can_decide_final: bool
     evidences: list[EvidenceOutput]
+    history: list[NonconformityHistoryOutput]
+
+
+class SupervisorDecisionInput(BaseModel):
+    approved: bool
+    comment: str = Field(min_length=3, max_length=10_000)
+
+    @field_validator("comment")
+    @classmethod
+    def clean_supervisor_comment(cls, value: str) -> str:
+        return value.strip()
+
+
+class ScenarioOutput(BaseModel):
+    id: str
+    name: str
+    zephyr_folder: str
+    reviewer_email: str
+    supervisor_email: str
+    test_case_count: int
+    created_at: datetime
+
+
+class ZephyrImportOutput(BaseModel):
+    imported_cases: int
+    scenarios: list[ScenarioOutput]

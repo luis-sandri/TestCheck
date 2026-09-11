@@ -8,6 +8,7 @@ from . import models  # noqa: F401 - registra as tabelas do schema inicial
 from .auth import router as auth_router
 from .audits import router as audit_router
 from .nonconformities import router as nonconformity_router
+from .scenarios import router as scenario_router
 from .test_cases import router as test_case_router
 
 
@@ -30,6 +31,7 @@ app.include_router(auth_router)
 app.include_router(test_case_router)
 app.include_router(audit_router)
 app.include_router(nonconformity_router)
+app.include_router(scenario_router)
 
 
 def ensure_database_ready() -> None:
@@ -45,6 +47,15 @@ def ensure_database_ready() -> None:
             connection.execute(
                 text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS responsible_email VARCHAR(255)")
             )
+            connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS scenario_id VARCHAR(36)"))
+            connection.execute(text("ALTER TABLE audit_items ADD COLUMN IF NOT EXISTS suggested_result VARCHAR(32)"))
+            connection.execute(text("ALTER TABLE audit_items ADD COLUMN IF NOT EXISTS final_result VARCHAR(32)"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS resolution_due_at TIMESTAMP WITH TIME ZONE"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS review_due_at TIMESTAMP WITH TIME ZONE"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS escalation_due_at TIMESTAMP WITH TIME ZONE"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP WITH TIME ZONE"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS supervisor_email VARCHAR(255)"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS final_decision TEXT"))
         connection.execute(text("SELECT 1"))
 
 

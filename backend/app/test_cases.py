@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from .auth import get_current_user
 from .database import get_db
-from .models import TestCase, User, UserRole
+from .models import Scenario, TestCase, User, UserRole
 from .schemas import TestCaseInput, TestCaseOutput
 
 
@@ -27,6 +27,8 @@ def serialize_case(test_case: TestCase) -> TestCaseOutput:
         author_id=test_case.author_id,
         author_name=test_case.author.full_name,
         responsible_email=test_case.responsible_email or test_case.author.email,
+        scenario_id=test_case.scenario_id,
+        scenario_name=test_case.scenario.name if test_case.scenario else None,
         created_at=test_case.created_at,
         updated_at=test_case.updated_at,
     )
@@ -34,7 +36,7 @@ def serialize_case(test_case: TestCase) -> TestCaseOutput:
 
 def get_case_or_404(case_id: str, db: Session) -> TestCase:
     test_case = db.scalar(
-        select(TestCase).options(selectinload(TestCase.author)).where(TestCase.id == case_id)
+        select(TestCase).options(selectinload(TestCase.author), selectinload(TestCase.scenario)).where(TestCase.id == case_id)
     )
     if test_case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caso de teste não encontrado.")
@@ -58,7 +60,7 @@ def list_test_cases(
     _: User = Depends(get_current_user),
 ) -> list[TestCaseOutput]:
     cases = db.scalars(
-        select(TestCase).options(selectinload(TestCase.author)).order_by(TestCase.created_at.desc())
+        select(TestCase).options(selectinload(TestCase.author), selectinload(TestCase.scenario)).order_by(TestCase.created_at.desc())
     ).all()
     return [serialize_case(test_case) for test_case in cases]
 
@@ -70,6 +72,10 @@ def create_test_case(
     current_user: User = Depends(get_current_user),
 ) -> TestCaseOutput:
     values = payload.model_dump()
+    if values["scenario_id"]:
+        scenario = db.get(Scenario, values["scenario_id"])
+        if scenario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cenário não encontrado.")
     values["responsible_email"] = values["responsible_email"] or current_user.email
     test_case = TestCase(code=next_code(db), author_id=current_user.id, **values)
     db.add(test_case)
@@ -97,6 +103,10 @@ def update_test_case(
     test_case = get_case_or_404(case_id, db)
     ensure_can_edit(test_case, current_user)
     values = payload.model_dump()
+    if values["scenario_id"]:
+        scenario = db.get(Scenario, values["scenario_id"])
+        if scenario is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cenário não encontrado.")
     if not values["responsible_email"]:
         values["responsible_email"] = test_case.responsible_email or test_case.author.email
     for field, value in values.items():

@@ -8,22 +8,24 @@ type PageName = 'dashboard' | 'test-cases' | 'audits' | 'nonconformities'
 type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN' }
 type TestCaseData = {
   id: string; code: string; title: string; description: string; preconditions: string; steps: string
-  test_data: string; expected_result: string; approval_criteria: string; author_name: string; responsible_email: string
+  test_data: string; expected_result: string; approval_criteria: string; author_name: string; responsible_email: string; scenario_id: string | null; scenario_name: string | null
 }
-type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'author_name'>
-type AuditItemData = { checklist_code: string; checklist_label: string; result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; note: string | null }
+type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'author_name' | 'scenario_name'>
+type ScenarioData = { id: string; name: string; zephyr_folder: string; reviewer_email: string; supervisor_email: string; test_case_count: number; created_at: string }
+type AuditItemData = { checklist_code: string; checklist_label: string; result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; suggested_result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; final_result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; note: string | null }
 type AuditData = {
   id: string; test_case_id: string; test_case_code: string; test_case_title: string; auditor_name: string
   status: 'DRAFT' | 'COMPLETED'; adherence_percentage: number | null; nonconformity_count: number
-  items: AuditItemData[]; created_at: string; completed_at: string | null
+  items: AuditItemData[]; created_at: string; completed_at: string | null; can_review: boolean
 }
 type EvidenceData = { id: string; description: string | null; resource_url: string | null; evidence_type: 'CORRECTION' | 'CONTESTATION'; status: 'SUBMITTED' | 'APPROVED' | 'REJECTED'; submitted_by_name: string; submitted_at: string; reviewer_comment: string | null }
+type NonconformityHistoryData = { id: string; actor_email: string | null; event_type: string; previous_status: string | null; new_status: string | null; message: string; created_at: string }
 type NonconformityData = {
-  id: string; code: string; test_case_code: string; test_case_title: string; description: string; severity: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'OPEN' | 'IN_CORRECTION' | 'WAITING_VALIDATION' | 'CONTESTED' | 'RESOLVED'; due_date: string | null; assignee_email: string | null; can_submit_evidence: boolean; can_review: boolean; evidences: EvidenceData[]
+  id: string; code: string; test_case_code: string; test_case_title: string; description: string; severity: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'OPEN' | 'IN_CORRECTION' | 'WAITING_VALIDATION' | 'CONTESTED' | 'ESCALATED' | 'RESOLVED'; due_date: string | null; assignee_email: string | null; supervisor_email: string | null; resolution_due_at: string | null; review_due_at: string | null; escalation_due_at: string | null; escalated_at: string | null; final_decision: string | null; can_submit_evidence: boolean; can_review: boolean; can_decide_final: boolean; evidences: EvidenceData[]; history: NonconformityHistoryData[]
 }
 
 const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
-  title: '', responsible_email: responsibleEmail, description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
+  title: '', scenario_id: '', responsible_email: responsibleEmail, description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
 })
 
 function initials(name: string) {
@@ -105,7 +107,7 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
       <div className="brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div><button className="sidebar-toggle" type="button" aria-expanded={isOpen} aria-label={isOpen ? 'Recolher menu' : 'Expandir menu'} onClick={() => setIsOpen((current) => !current)}>{isOpen ? '×' : '☰'}</button></div>
       <nav aria-label="Navegação principal">
         <a className={`nav-item ${active === 'dashboard' ? 'active' : ''}`} href="#dashboard" onClick={navigate(onDashboard)}><NavIcon name="dashboard" /> Visão geral</a>
-        <a className={`nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><NavIcon name="test-cases" /> Casos de teste</a>
+        <a className={`nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><NavIcon name="test-cases" /> Cenários e casos</a>
         <a className={`nav-item ${active === 'audits' ? 'active' : ''}`} href="#audits" onClick={navigate(onAudits)}><NavIcon name="audits" /> Auditorias</a>
         <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><NavIcon name="nonconformities" /> Não conformidades</a>
       </nav>
@@ -162,23 +164,50 @@ function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAu
 
 function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconformities, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; onBack: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void; onLogout: () => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
+  const [scenarios, setScenarios] = useState<ScenarioData[]>([])
   const [form, setForm] = useState<TestCaseForm>(() => blankTestCase(user.email))
   const [editingId, setEditingId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [caseToDelete, setCaseToDelete] = useState<TestCaseData | null>(null)
+  const [zephyrFile, setZephyrFile] = useState<File | null>(null)
+  const [reviewerEmail, setReviewerEmail] = useState(user.email)
+  const [supervisorEmail, setSupervisorEmail] = useState('')
+  const [importing, setImporting] = useState(false)
 
   const loadCases = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/test-cases', { credentials: 'include' })
-      if (!response.ok) throw new Error()
-      setCases(await response.json() as TestCaseData[])
+      const [casesResponse, scenariosResponse] = await Promise.all([
+        fetch('/api/test-cases', { credentials: 'include' }),
+        fetch('/api/scenarios', { credentials: 'include' }),
+      ])
+      if (!casesResponse.ok || !scenariosResponse.ok) throw new Error()
+      setCases(await casesResponse.json() as TestCaseData[])
+      setScenarios(await scenariosResponse.json() as ScenarioData[])
     } catch { setMessage('Não foi possível carregar os casos de teste.') } finally { setLoading(false) }
   }
 
   useEffect(() => { void loadCases() }, [])
+  const importZephyr = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    if (!zephyrFile) { setMessage('Selecione o CSV exportado pelo Zephyr.'); return }
+    setImporting(true)
+    setMessage('')
+    try {
+      const payload = new FormData()
+      payload.append('file', zephyrFile)
+      payload.append('reviewer_email', reviewerEmail)
+      payload.append('supervisor_email', supervisorEmail)
+      const response = await fetch('/api/scenarios/import-zephyr', { method: 'POST', credentials: 'include', body: payload })
+      const result = await response.json().catch(() => ({})) as { imported_cases?: number; scenarios?: ScenarioData[]; detail?: string }
+      if (!response.ok) throw new Error(result.detail || 'Não foi possível importar o arquivo.')
+      setZephyrFile(null)
+      await loadCases()
+      setMessage(`${result.imported_cases ?? 0} caso(s) importado(s) e organizado(s) por cenário.`)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível importar o arquivo.') } finally { setImporting(false) }
+  }
   const setField = (field: keyof TestCaseForm, value: string) => setForm((current) => ({ ...current, [field]: value }))
   const nextStepNumber = (steps: string) => {
     const numbers = [...steps.matchAll(/(?:^|\n)\s*(\d+)\.\s/g)].map((match) => Number(match[1]))
@@ -205,9 +234,9 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
     window.requestAnimationFrame(() => target.setSelectionRange(position + insertion.length, position + insertion.length))
   }
   const edit = (testCase: TestCaseData) => {
-    const { id, code, author_name, ...values } = testCase
+    const { id, code, author_name, scenario_name, ...values } = testCase
     setEditingId(id)
-    setForm(values)
+    setForm({ ...values, scenario_id: values.scenario_id || '' })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
   const reset = () => { setEditingId(null); setForm(blankTestCase(user.email)); setMessage('') }
@@ -217,7 +246,7 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
     setMessage('')
     try {
       const response = await fetch(editingId ? `/api/test-cases/${editingId}` : '/api/test-cases', {
-        method: editingId ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(form),
+        method: editingId ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, scenario_id: form.scenario_id || null }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.detail || 'Não foi possível salvar.')
@@ -233,14 +262,16 @@ function TestCasesPage({ apiStatus, user, onBack, onOpenAudits, onOpenNonconform
   }
 
   return <div className="app-shell"><Sidebar active="test-cases" user={user} onDashboard={onBack} onCases={() => undefined} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
-    <header className="topbar"><div><p className="eyebrow">ARTEFATOS DE SOFTWARE</p><h1>Casos de teste</h1><p className="subtitle">Cadastre os casos que serão avaliados pela auditoria.</p></div><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></header>
+    <header className="topbar"><div><p className="eyebrow">IMPORTAÇÃO E ORGANIZAÇÃO</p><h1>Cenários e casos de teste</h1><p className="subtitle">Cada folder do Zephyr é tratado como um cenário para agrupar casos e não conformidades.</p></div><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></header>
+    <section className="scenario-workspace"><form className="panel scenario-import" onSubmit={importZephyr}><div className="panel-header"><div><h2>Importar exportação do Zephyr</h2><p>Envie um CSV. O campo Folder cria ou atualiza os cenários e preserva a organização de origem.</p></div></div><div className="form-fields compact-fields"><label>Arquivo CSV do Zephyr *<input type="file" accept=".csv,text/csv" required onChange={(event) => setZephyrFile(event.target.files?.[0] || null)} /></label><label>Revisor do cenário *<input type="email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} required /></label><label>Supervisor para escalonamento *<input type="email" value={supervisorEmail} onChange={(event) => setSupervisorEmail(event.target.value)} placeholder="supervisor@exemplo.com" required /></label></div><div className="form-actions"><button className="primary-button" disabled={importing} type="submit">{importing ? 'Importando…' : 'Importar e criar cenários'}</button></div></form>
+      <aside className="panel scenario-list"><div className="panel-header"><div><h2>Cenários importados</h2><p>{loading ? 'Carregando…' : `${scenarios.length} cenário(s) organizado(s) por folder.`}</p></div></div><div className="scenario-list-content">{!loading && scenarios.length === 0 && <p className="empty-state">Importe um CSV do Zephyr para criar o primeiro cenário.</p>}{scenarios.map((scenario) => <article className="scenario-summary" key={scenario.id}><strong>{scenario.name}</strong><span>{scenario.test_case_count} caso(s) · {scenario.zephyr_folder}</span><small>Revisor: {scenario.reviewer_email}<br />Supervisor: {scenario.supervisor_email}</small></article>)}</div></aside></section>
     <section className="case-workspace"><form className="panel case-form" onSubmit={save}>
-      <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco poderão ser identificados na auditoria.</p></div></div>
-      <div className="form-fields"><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pela correção * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
+      <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco geram apenas uma sugestão; o revisor decide o resultado final.</p></div></div>
+      <div className="form-fields"><label>Cenário *<select value={form.scenario_id || ''} onChange={(event) => setField('scenario_id', event.target.value)} required><option value="">Selecione um cenário importado</option>{scenarios.map((scenario) => <option value={scenario.id} key={scenario.id}>{scenario.name}</option>)}</select></label><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pela correção * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label><label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
       <div className="form-actions"><button className="text-button" type="button" onClick={reset}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
     </form>
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${cases.length} caso(s) no banco compartilhado.`}</p></div></div>
-      <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Crie o primeiro usando o formulário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
+      <div className="case-list-content">{!loading && cases.length === 0 && <p className="empty-state">Ainda não há casos de teste. Importe um CSV do Zephyr ou crie o primeiro em um cenário.</p>}{cases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Cenário: {testCase.scenario_name || 'Não vinculado'}</p><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
     <ConfirmationModal isOpen={Boolean(caseToDelete)} title="Excluir caso de teste?" description={caseToDelete ? `Você removerá ${caseToDelete.code} — ${caseToDelete.title}. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir caso" tone="danger" onCancel={() => setCaseToDelete(null)} onConfirm={() => { if (caseToDelete) void remove(caseToDelete) }} />
@@ -253,6 +284,8 @@ function AuditPage({ apiStatus, user, onBack, onOpenCases, onOpenNonconformities
   const [audits, setAudits] = useState<AuditData[]>([])
   const [loading, setLoading] = useState(true)
   const [runningId, setRunningId] = useState<string | null>(null)
+  const [reviewingId, setReviewingId] = useState<string | null>(null)
+  const [reviewItems, setReviewItems] = useState<Record<string, { result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE'; priority: 'LOW' | 'MEDIUM' | 'HIGH' }>>({})
   const [message, setMessage] = useState('')
 
   const loadData = async () => {
@@ -275,15 +308,32 @@ function AuditPage({ apiStatus, user, onBack, onOpenCases, onOpenNonconformities
       const response = await fetch('/api/audits', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ test_case_id: testCase.id }) })
       const audit = await response.json().catch(() => ({})) as Partial<AuditData> & { detail?: string }
       if (!response.ok) throw new Error(audit.detail || 'Não foi possível executar a auditoria.')
-      setMessage(`Auditoria concluída: ${audit.adherence_percentage}% de aderência e ${audit.nonconformity_count} NC(s) gerada(s).`)
+      setMessage('Sugestões automáticas criadas. O revisor deve confirmar cada item antes de gerar NCs.')
       await loadData()
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível executar a auditoria.') } finally { setRunningId(null) }
   }
 
+  const openReview = (audit: AuditData) => {
+    setReviewingId(audit.id)
+    setReviewItems(Object.fromEntries(audit.items.map((item) => [item.checklist_code, { result: item.suggested_result || item.result || 'CONFORMING', priority: 'MEDIUM' }])))
+  }
+  const finalizeReview = async (audit: AuditData) => {
+    setRunningId(audit.id)
+    try {
+      const items = audit.items.map((item) => ({ checklist_code: item.checklist_code, ...(reviewItems[item.checklist_code] || { result: 'CONFORMING', priority: 'MEDIUM' }) }))
+      const response = await fetch(`/api/audits/${audit.id}/review`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ items }) })
+      const payload = await response.json().catch(() => ({})) as { detail?: string; nonconformity_count?: number }
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível finalizar a revisão.')
+      setReviewingId(null)
+      await loadData()
+      setMessage(`Revisão finalizada. ${payload.nonconformity_count ?? 0} NC(s) confirmada(s).`)
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível finalizar a revisão.') } finally { setRunningId(null) }
+  }
+
   return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
-    <header className="topbar"><div><p className="eyebrow">AUDITORIA AUTOMATIZADA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Avalie os campos essenciais e gere não conformidades automaticamente.</p></div></header>
+    <header className="topbar"><div><p className="eyebrow">AUDITORIA ASSISTIDA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">A automação sugere resultados; o revisor confirma cada item e define a prioridade das NCs.</p></div></header>
     <section className="audit-workspace"><section className="panel audit-run"><div className="panel-header"><div><h2>Executar nova auditoria</h2><p>O checklist verifica objetivo, pré-condições, passos, dados, resultado e critério de aprovação.</p></div></div><div className="audit-case-list">{!loading && cases.length === 0 && <p className="empty-state">Cadastre um caso de teste antes de iniciar a auditoria.</p>}{cases.map((testCase) => <article className="audit-case" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Responsável da futura NC: {testCase.responsible_email}</p></div><button className="primary-button" type="button" disabled={runningId === testCase.id} onClick={() => void runAudit(testCase)}>{runningId === testCase.id ? 'Auditando…' : 'Auditar'}</button></article>)}</div><ApiState status={apiStatus} /></section>
-      <section className="panel audit-history"><div className="panel-header"><div><h2>Histórico</h2><p>{loading ? 'Carregando…' : `${audits.length} auditoria(s) realizada(s).`}</p></div></div><div className="audit-history-list">{!loading && audits.length === 0 && <p className="empty-state">Nenhuma auditoria realizada ainda.</p>}{audits.map((audit) => <article className="audit-summary" key={audit.id}><div><span className="case-code">{audit.test_case_code}</span><h3>{audit.test_case_title}</h3><p>{audit.auditor_name} · {audit.nonconformity_count} NC(s)</p><details><summary>Ver checklist</summary><ul>{audit.items.map((item) => <li key={item.checklist_code}><span className={item.result === 'CONFORMING' ? 'audit-result conforming' : 'audit-result nonconforming'}>{item.result === 'CONFORMING' ? 'Conforme' : 'NC'}</span>{item.checklist_label}</li>)}</ul></details></div><strong className="adherence-value">{audit.adherence_percentage ?? 0}%</strong></article>)}</div></section></section>
+      <section className="panel audit-history"><div className="panel-header"><div><h2>Revisões e histórico</h2><p>{loading ? 'Carregando…' : `${audits.length} auditoria(s) registrada(s).`}</p></div></div><div className="audit-history-list">{!loading && audits.length === 0 && <p className="empty-state">Nenhuma auditoria realizada ainda.</p>}{audits.map((audit) => <article className="audit-summary reviewable-audit" key={audit.id}><div><span className="case-code">{audit.test_case_code}</span><h3>{audit.test_case_title}</h3><p>{audit.status === 'DRAFT' ? 'Aguardando decisão do revisor.' : `${audit.auditor_name} · ${audit.nonconformity_count} NC(s) confirmada(s).`}</p>{audit.status === 'COMPLETED' && <strong className="adherence-value">{audit.adherence_percentage ?? 0}%</strong>}<details><summary>{audit.status === 'DRAFT' ? 'Ver sugestões automáticas' : 'Ver checklist final'}</summary><ul>{audit.items.map((item) => <li key={item.checklist_code}><span className={item.result === 'CONFORMING' ? 'audit-result conforming' : 'audit-result nonconforming'}>{item.result === 'CONFORMING' ? 'Conforme' : item.result === 'NOT_APPLICABLE' ? 'N/A' : 'NC'}</span>{item.checklist_label}</li>)}</ul></details>{audit.can_review && reviewingId !== audit.id && <button className="primary-button" type="button" onClick={() => openReview(audit)}>Revisar sugestões</button>}{audit.can_review && reviewingId === audit.id && <div className="review-checklist"><h4>Decisão final do revisor</h4>{audit.items.map((item) => { const current = reviewItems[item.checklist_code]; return <div className="review-item" key={item.checklist_code}><div><strong>{item.checklist_label}</strong><span>Sugestão: {item.suggested_result === 'CONFORMING' ? 'Conforme' : 'Não conforme'}</span></div><select value={current?.result || 'CONFORMING'} onChange={(event) => setReviewItems((all) => ({ ...all, [item.checklist_code]: { result: event.target.value as 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE', priority: current?.priority || 'MEDIUM' } }))}><option value="CONFORMING">Conforme</option><option value="NONCONFORMING">Não conforme</option><option value="NOT_APPLICABLE">Não se aplica</option></select>{current?.result === 'NONCONFORMING' && <select value={current.priority} aria-label={`Prioridade de ${item.checklist_label}`} onChange={(event) => setReviewItems((all) => ({ ...all, [item.checklist_code]: { result: current.result, priority: event.target.value as 'LOW' | 'MEDIUM' | 'HIGH' } }))}><option value="LOW">Prioridade baixa</option><option value="MEDIUM">Prioridade média</option><option value="HIGH">Prioridade alta</option></select>}</div> })}<div className="form-actions"><button className="text-button" type="button" onClick={() => setReviewingId(null)}>Cancelar</button><button className="primary-button" disabled={runningId === audit.id} type="button" onClick={() => void finalizeReview(audit)}>{runningId === audit.id ? 'Finalizando…' : 'Confirmar revisão e gerar NCs'}</button></div></div>}</div></article>)}</div></section></section>
     <Toast message={message} onDismiss={() => setMessage('')} />
   </main></div>
 }
@@ -295,6 +345,7 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
   const [sending, setSending] = useState<string | null>(null)
   const [message, setMessage] = useState('')
   const [reviewTarget, setReviewTarget] = useState<{ nonconformity: NonconformityData; evidence: EvidenceData; approved: boolean } | null>(null)
+  const [supervisorDrafts, setSupervisorDrafts] = useState<Record<string, string>>({})
 
   const loadNonconformities = async () => {
     setLoading(true)
@@ -338,21 +389,38 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
       setMessage(payload.email_sent ? 'E-mail de lembrete enviado.' : 'A Resend recusou o e-mail. Confira a conta e o domínio configurados.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível reenviar o e-mail.') } finally { setSending(null) }
   }
-  const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', RESOLVED: 'Resolvida' }
-  const statusTone: Record<NonconformityData['status'], string> = { OPEN: 'danger', IN_CORRECTION: 'warning', WAITING_VALIDATION: 'info', CONTESTED: 'contested', RESOLVED: 'success' }
+  const decideAsSupervisor = async (nonconformity: NonconformityData, approved: boolean) => {
+    const comment = (supervisorDrafts[nonconformity.id] || '').trim()
+    if (comment.length < 3) { setMessage('Registre a justificativa da decisão final antes de continuar.'); return }
+    setSending(nonconformity.id)
+    try {
+      const response = await fetch(`/api/nonconformities/${nonconformity.id}/supervisor-decision`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ approved, comment }) })
+      const payload = await response.json().catch(() => ({})) as { detail?: string }
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível registrar a decisão final.')
+      setSupervisorDrafts((all) => ({ ...all, [nonconformity.id]: '' }))
+      setMessage(approved ? 'Decisão final registrada: NC resolvida.' : 'Decisão final registrada: NC devolvida para correção.')
+      await loadNonconformities()
+    } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível registrar a decisão final.') } finally { setSending(null) }
+  }
+  const formatDeadline = (date: string | null) => date ? new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(date)) : 'não definido'
+  const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', ESCALATED: 'Escalada', RESOLVED: 'Resolvida' }
+  const statusTone: Record<NonconformityData['status'], string> = { OPEN: 'danger', IN_CORRECTION: 'warning', WAITING_VALIDATION: 'info', CONTESTED: 'contested', ESCALATED: 'escalated', RESOLVED: 'success' }
   const severityLabel: Record<NonconformityData['severity'], string> = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta' }
   const severityTone: Record<NonconformityData['severity'], string> = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' }
 
   return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} /><main>
-    <header className="topbar"><div><p className="eyebrow">ACOMPANHAMENTO DE CORREÇÕES</p><h1>Não conformidades</h1><p className="subtitle">Envie evidências de correção, conteste uma NC ou valide o que foi entregue.</p></div></header>
+    <header className="topbar"><div><p className="eyebrow">CICLO DE VIDA E ESCALONAMENTO</p><h1>Não conformidades</h1><p className="subtitle">Acompanhe cada NC desde a geração, passando por correção ou contestação, até a decisão final.</p></div></header>
     <section className="nonconformity-list">
       {!loading && nonconformities.length === 0 && <section className="panel"><p className="empty-state">Nenhuma não conformidade atribuída à sua conta.</p></section>}
       {nonconformities.map((nonconformity) => <article className="panel nonconformity-card" key={nonconformity.id}>
         <div className="nc-header"><div><span className="case-code">{nonconformity.code} · {nonconformity.test_case_code}</span><h2>{nonconformity.test_case_title}</h2><p>{nonconformity.description}</p></div><div className="nc-badges"><span className={`priority ${severityTone[nonconformity.severity]}`}>Prioridade {severityLabel[nonconformity.severity]}</span><span className={`status ${statusTone[nonconformity.status]}`}>{statusLabel[nonconformity.status]}</span></div></div>
-        <p className="nc-meta">Responsável: {nonconformity.assignee_email} · Prazo: {nonconformity.due_date || 'não definido'}</p>
-        {nonconformity.status !== 'RESOLVED' && (nonconformity.can_submit_evidence || nonconformity.can_review) && <button className="secondary-button secondary-compact" disabled={sending === nonconformity.id} type="button" onClick={() => void retryNotification(nonconformity)}><span aria-hidden="true">↗</span> {sending === nonconformity.id ? 'Enviando…' : 'Reenviar e-mail'}</button>}
+        <p className="nc-meta">Responsável: {nonconformity.assignee_email} · Supervisor: {nonconformity.supervisor_email || 'não definido'}</p>
+        <div className="deadline-grid"><span><strong>Correção/contestação</strong>{formatDeadline(nonconformity.resolution_due_at)}</span><span><strong>Revisão</strong>{formatDeadline(nonconformity.review_due_at)}</span><span><strong>Escalonamento</strong>{formatDeadline(nonconformity.escalation_due_at)}</span></div>
+        {nonconformity.status !== 'RESOLVED' && (nonconformity.can_submit_evidence || nonconformity.can_review || nonconformity.can_decide_final) && <button className="secondary-button secondary-compact" disabled={sending === nonconformity.id} type="button" onClick={() => void retryNotification(nonconformity)}><span aria-hidden="true">↗</span> {sending === nonconformity.id ? 'Enviando…' : 'Reenviar e-mail'}</button>}
         {nonconformity.can_submit_evidence && nonconformity.status !== 'RESOLVED' && <div className="evidence-form"><textarea value={drafts[nonconformity.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [nonconformity.id]: event.target.value }))} placeholder="Descreva o que foi corrigido ou o motivo da contestação." /><div><button className="primary-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CORRECTION')}>Enviar correção</button><button className="secondary-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CONTESTATION')}>Contestar NC</button></div></div>}
         <div className="evidence-list">{nonconformity.evidences.map((evidence) => <article className="evidence-item" key={evidence.id}><div><strong>{evidence.evidence_type === 'CORRECTION' ? 'Correção' : 'Contestação'} por {evidence.submitted_by_name}</strong><p>{evidence.description}</p></div><span className={`status ${evidence.status === 'APPROVED' ? 'success' : evidence.status === 'REJECTED' ? 'danger' : 'warning'}`}>{evidence.status === 'SUBMITTED' ? 'Pendente' : evidence.status === 'APPROVED' ? 'Aprovada' : 'Devolvida'}</span>{nonconformity.can_review && evidence.status === 'SUBMITTED' && <div className="review-actions"><button className="review-button approve" disabled={sending === nonconformity.id} type="button" onClick={() => setReviewTarget({ nonconformity, evidence, approved: true })}><span aria-hidden="true">✓</span> Aprovar correção</button><button className="review-button return" disabled={sending === nonconformity.id} type="button" onClick={() => setReviewTarget({ nonconformity, evidence, approved: false })}><span aria-hidden="true">↩</span> Devolver para correção</button></div>}</article>)}</div>
+        {nonconformity.can_decide_final && <section className="supervisor-decision"><h3>Decisão final do supervisor</h3><p>O prazo foi vencido. Registre a justificativa e encerre a NC ou devolva para a última correção.</p><textarea value={supervisorDrafts[nonconformity.id] || ''} onChange={(event) => setSupervisorDrafts((all) => ({ ...all, [nonconformity.id]: event.target.value }))} placeholder="Justificativa da decisão final" /><div><button className="review-button approve" disabled={sending === nonconformity.id} type="button" onClick={() => void decideAsSupervisor(nonconformity, true)}>Encerrar NC</button><button className="review-button return" disabled={sending === nonconformity.id} type="button" onClick={() => void decideAsSupervisor(nonconformity, false)}>Devolver para correção</button></div></section>}
+        <details className="lifecycle-history"><summary>Ver ciclo de vida completo ({nonconformity.history.length})</summary><ol>{nonconformity.history.map((event) => <li key={event.id}><strong>{event.event_type.replaceAll('_', ' ')}</strong><span>{event.message}</span><small>{event.actor_email || 'Sistema'} · {formatDeadline(event.created_at)}</small></li>)}</ol></details>
       </article>)}
       <ApiState status={apiStatus} />
     </section>
@@ -385,8 +453,8 @@ function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits, onOpe
     void loadDashboard()
   }, [])
 
-  const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', RESOLVED: 'Resolvida' }
-  const statusTone: Record<NonconformityData['status'], string> = { OPEN: 'danger', IN_CORRECTION: 'warning', WAITING_VALIDATION: 'info', CONTESTED: 'contested', RESOLVED: 'success' }
+  const statusLabel: Record<NonconformityData['status'], string> = { OPEN: 'Aberta', IN_CORRECTION: 'Em correção', WAITING_VALIDATION: 'Aguardando validação', CONTESTED: 'Contestada', ESCALATED: 'Escalada', RESOLVED: 'Resolvida' }
+  const statusTone: Record<NonconformityData['status'], string> = { OPEN: 'danger', IN_CORRECTION: 'warning', WAITING_VALIDATION: 'info', CONTESTED: 'contested', ESCALATED: 'escalated', RESOLVED: 'success' }
   const latestNonconformityByCase = new Map(nonconformities.map((nonconformity) => [nonconformity.test_case_code, nonconformity]))
   const recentAudits = audits.slice(0, 3)
   const openNonconformities = nonconformities.filter((nonconformity) => nonconformity.status !== 'RESOLVED')

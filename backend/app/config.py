@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     email_from: str = "TestCheck <onboarding@resend.dev>"
     session_cookie_name: str = "testcheck_session"
     session_duration_hours: int = 168
+    cron_secret: str | None = None
 
     model_config = SettingsConfigDict(
         env_file=("../.env", ".env"),

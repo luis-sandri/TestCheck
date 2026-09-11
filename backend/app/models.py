@@ -49,6 +49,7 @@ class NonconformityStatus(StrEnum):
     IN_CORRECTION = "IN_CORRECTION"
     WAITING_VALIDATION = "WAITING_VALIDATION"
     CONTESTED = "CONTESTED"
+    ESCALATED = "ESCALATED"
     RESOLVED = "RESOLVED"
 
 
@@ -99,6 +100,26 @@ class User(Base):
     sessions: Mapped[list[UserSession]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    scenarios: Mapped[list[Scenario]] = relationship(back_populates="created_by")
+
+
+class Scenario(Base):
+    """Agrupa os casos de teste pela pasta de origem do Zephyr."""
+
+    __tablename__ = "scenarios"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
+    name: Mapped[str] = mapped_column(String(180))
+    zephyr_folder: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    reviewer_email: Mapped[str] = mapped_column(String(255))
+    supervisor_email: Mapped[str] = mapped_column(String(255))
+    created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    created_by: Mapped[User] = relationship(back_populates="scenarios")
+    test_cases: Mapped[list[TestCase]] = relationship(back_populates="scenario")
 
 
 class TestCase(Base):
@@ -113,6 +134,7 @@ class TestCase(Base):
     test_data: Mapped[str | None] = mapped_column(Text)
     expected_result: Mapped[str | None] = mapped_column(Text)
     approval_criteria: Mapped[str | None] = mapped_column(Text)
+    scenario_id: Mapped[str | None] = mapped_column(ForeignKey("scenarios.id"), index=True)
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     responsible_email: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
@@ -123,6 +145,7 @@ class TestCase(Base):
     )
 
     author: Mapped[User] = relationship(back_populates="authored_test_cases")
+    scenario: Mapped[Scenario | None] = relationship(back_populates="test_cases")
     audits: Mapped[list[Audit]] = relationship(back_populates="test_case", cascade="all, delete-orphan")
     nonconformities: Mapped[list[Nonconformity]] = relationship(back_populates="test_case")
 
@@ -161,6 +184,12 @@ class AuditItem(Base):
     result: Mapped[ChecklistResult | None] = mapped_column(
         Enum(ChecklistResult, native_enum=False)
     )
+    suggested_result: Mapped[ChecklistResult | None] = mapped_column(
+        Enum(ChecklistResult, native_enum=False)
+    )
+    final_result: Mapped[ChecklistResult | None] = mapped_column(
+        Enum(ChecklistResult, native_enum=False)
+    )
     note: Mapped[str | None] = mapped_column(Text)
 
     audit: Mapped[Audit] = relationship(back_populates="items")
@@ -184,6 +213,12 @@ class Nonconformity(Base):
         Enum(NonconformityStatus, native_enum=False), default=NonconformityStatus.OPEN
     )
     due_date: Mapped[date | None] = mapped_column(Date)
+    resolution_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalation_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supervisor_email: Mapped[str | None] = mapped_column(String(255))
+    final_decision: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -197,6 +232,28 @@ class Nonconformity(Base):
     evidences: Mapped[list[Evidence]] = relationship(
         back_populates="nonconformity", cascade="all, delete-orphan"
     )
+    history: Mapped[list[NonconformityHistory]] = relationship(
+        back_populates="nonconformity", cascade="all, delete-orphan", order_by="NonconformityHistory.created_at"
+    )
+
+
+class NonconformityHistory(Base):
+    """Trilha auditável de todas as mudanças no ciclo de vida de uma NC."""
+
+    __tablename__ = "nonconformity_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
+    nonconformity_id: Mapped[str] = mapped_column(ForeignKey("nonconformities.id"), nullable=False, index=True)
+    actor_email: Mapped[str | None] = mapped_column(String(255))
+    event_type: Mapped[str] = mapped_column(String(80))
+    previous_status: Mapped[str | None] = mapped_column(String(40))
+    new_status: Mapped[str | None] = mapped_column(String(40))
+    message: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    nonconformity: Mapped[Nonconformity] = relationship(back_populates="history")
 
 
 class Evidence(Base):
