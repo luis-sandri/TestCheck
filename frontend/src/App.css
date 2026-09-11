@@ -1062,7 +1062,7 @@ td strong {
 
 .deadline-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8px;
   margin: 12px 0;
 }
@@ -1078,6 +1078,8 @@ td strong {
 }
 
 .deadline-grid strong { color: #314337; font-size: 12px; }
+.sla-description { margin: 12px 0 -4px; color: #486052; font-size: 12px; font-weight: 700; }
+.sla-description span { color: #748277; font-weight: 500; }
 
 .supervisor-decision {
   margin-top: 16px;

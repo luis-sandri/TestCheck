@@ -216,6 +216,7 @@ class Nonconformity(Base):
     resolution_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     review_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     escalation_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    supervisor_decision_due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     escalated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     supervisor_email: Mapped[str | None] = mapped_column(String(255))
     final_decision: Mapped[str | None] = mapped_column(Text)

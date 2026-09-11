@@ -21,7 +21,7 @@ type AuditData = {
 type EvidenceData = { id: string; description: string | null; resource_url: string | null; evidence_type: 'CORRECTION' | 'CONTESTATION'; status: 'SUBMITTED' | 'APPROVED' | 'REJECTED'; submitted_by_name: string; submitted_at: string; reviewer_comment: string | null }
 type NonconformityHistoryData = { id: string; actor_email: string | null; event_type: string; previous_status: string | null; new_status: string | null; message: string; created_at: string }
 type NonconformityData = {
-  id: string; code: string; test_case_code: string; test_case_title: string; description: string; severity: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'OPEN' | 'IN_CORRECTION' | 'WAITING_VALIDATION' | 'CONTESTED' | 'ESCALATED' | 'RESOLVED'; due_date: string | null; assignee_email: string | null; supervisor_email: string | null; resolution_due_at: string | null; review_due_at: string | null; escalation_due_at: string | null; escalated_at: string | null; final_decision: string | null; can_submit_evidence: boolean; can_review: boolean; can_decide_final: boolean; evidences: EvidenceData[]; history: NonconformityHistoryData[]
+  id: string; code: string; test_case_code: string; test_case_title: string; description: string; severity: 'LOW' | 'MEDIUM' | 'HIGH'; status: 'OPEN' | 'IN_CORRECTION' | 'WAITING_VALIDATION' | 'CONTESTED' | 'ESCALATED' | 'RESOLVED'; due_date: string | null; assignee_email: string | null; supervisor_email: string | null; resolution_due_at: string | null; review_due_at: string | null; escalation_due_at: string | null; supervisor_decision_due_at: string | null; escalated_at: string | null; final_decision: string | null; can_submit_evidence: boolean; can_review: boolean; can_decide_final: boolean; evidences: EvidenceData[]; history: NonconformityHistoryData[]
 }
 
 const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
@@ -407,6 +407,11 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
   const statusTone: Record<NonconformityData['status'], string> = { OPEN: 'danger', IN_CORRECTION: 'warning', WAITING_VALIDATION: 'info', CONTESTED: 'contested', ESCALATED: 'escalated', RESOLVED: 'success' }
   const severityLabel: Record<NonconformityData['severity'], string> = { LOW: 'Baixa', MEDIUM: 'Média', HIGH: 'Alta' }
   const severityTone: Record<NonconformityData['severity'], string> = { LOW: 'low', MEDIUM: 'medium', HIGH: 'high' }
+  const slaLabel: Record<NonconformityData['severity'], string> = {
+    HIGH: 'SLA: responsável 2 dias úteis · revisor 1 dia útil · supervisor 1 dia útil',
+    MEDIUM: 'SLA: responsável 5 dias úteis · revisor 2 dias úteis · supervisor 2 dias úteis',
+    LOW: 'SLA: responsável 10 dias úteis · revisor 3 dias úteis · supervisor 3 dias úteis',
+  }
 
   return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} /><main>
     <header className="topbar"><div><p className="eyebrow">CICLO DE VIDA E ESCALONAMENTO</p><h1>Não conformidades</h1><p className="subtitle">Acompanhe cada NC desde a geração, passando por correção ou contestação, até a decisão final.</p></div></header>
@@ -415,11 +420,12 @@ function NonconformitiesPage({ apiStatus, user, onBack, onOpenCases, onOpenAudit
       {nonconformities.map((nonconformity) => <article className="panel nonconformity-card" key={nonconformity.id}>
         <div className="nc-header"><div><span className="case-code">{nonconformity.code} · {nonconformity.test_case_code}</span><h2>{nonconformity.test_case_title}</h2><p>{nonconformity.description}</p></div><div className="nc-badges"><span className={`priority ${severityTone[nonconformity.severity]}`}>Prioridade {severityLabel[nonconformity.severity]}</span><span className={`status ${statusTone[nonconformity.status]}`}>{statusLabel[nonconformity.status]}</span></div></div>
         <p className="nc-meta">Responsável: {nonconformity.assignee_email} · Supervisor: {nonconformity.supervisor_email || 'não definido'}</p>
-        <div className="deadline-grid"><span><strong>Correção/contestação</strong>{formatDeadline(nonconformity.resolution_due_at)}</span><span><strong>Revisão</strong>{formatDeadline(nonconformity.review_due_at)}</span><span><strong>Escalonamento</strong>{formatDeadline(nonconformity.escalation_due_at)}</span></div>
+        <p className="sla-description">{slaLabel[nonconformity.severity]} <span>(seg. a sex.; sem feriados no MVP)</span></p>
+        <div className="deadline-grid"><span><strong>Correção/contestação</strong>{formatDeadline(nonconformity.resolution_due_at)}</span><span><strong>Aprovar ou reprovar</strong>{formatDeadline(nonconformity.review_due_at)}</span><span><strong>Escalonamento automático</strong>{nonconformity.escalated_at ? formatDeadline(nonconformity.escalated_at) : formatDeadline(nonconformity.escalation_due_at)}</span><span><strong>Decisão do supervisor</strong>{formatDeadline(nonconformity.supervisor_decision_due_at)}</span></div>
         {nonconformity.status !== 'RESOLVED' && (nonconformity.can_submit_evidence || nonconformity.can_review || nonconformity.can_decide_final) && <button className="secondary-button secondary-compact" disabled={sending === nonconformity.id} type="button" onClick={() => void retryNotification(nonconformity)}><span aria-hidden="true">↗</span> {sending === nonconformity.id ? 'Enviando…' : 'Reenviar e-mail'}</button>}
         {nonconformity.can_submit_evidence && nonconformity.status !== 'RESOLVED' && <div className="evidence-form"><textarea value={drafts[nonconformity.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [nonconformity.id]: event.target.value }))} placeholder="Descreva o que foi corrigido ou o motivo da contestação." /><div><button className="primary-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CORRECTION')}>Enviar correção</button><button className="secondary-button" disabled={sending === nonconformity.id} type="button" onClick={() => void submitEvidence(nonconformity, 'CONTESTATION')}>Contestar NC</button></div></div>}
         <div className="evidence-list">{nonconformity.evidences.map((evidence) => <article className="evidence-item" key={evidence.id}><div><strong>{evidence.evidence_type === 'CORRECTION' ? 'Correção' : 'Contestação'} por {evidence.submitted_by_name}</strong><p>{evidence.description}</p></div><span className={`status ${evidence.status === 'APPROVED' ? 'success' : evidence.status === 'REJECTED' ? 'danger' : 'warning'}`}>{evidence.status === 'SUBMITTED' ? 'Pendente' : evidence.status === 'APPROVED' ? 'Aprovada' : 'Devolvida'}</span>{nonconformity.can_review && evidence.status === 'SUBMITTED' && <div className="review-actions"><button className="review-button approve" disabled={sending === nonconformity.id} type="button" onClick={() => setReviewTarget({ nonconformity, evidence, approved: true })}><span aria-hidden="true">✓</span> Aprovar correção</button><button className="review-button return" disabled={sending === nonconformity.id} type="button" onClick={() => setReviewTarget({ nonconformity, evidence, approved: false })}><span aria-hidden="true">↩</span> Devolver para correção</button></div>}</article>)}</div>
-        {nonconformity.can_decide_final && <section className="supervisor-decision"><h3>Decisão final do supervisor</h3><p>O prazo foi vencido. Registre a justificativa e encerre a NC ou devolva para a última correção.</p><textarea value={supervisorDrafts[nonconformity.id] || ''} onChange={(event) => setSupervisorDrafts((all) => ({ ...all, [nonconformity.id]: event.target.value }))} placeholder="Justificativa da decisão final" /><div><button className="review-button approve" disabled={sending === nonconformity.id} type="button" onClick={() => void decideAsSupervisor(nonconformity, true)}>Encerrar NC</button><button className="review-button return" disabled={sending === nonconformity.id} type="button" onClick={() => void decideAsSupervisor(nonconformity, false)}>Devolver para correção</button></div></section>}
+        {nonconformity.can_decide_final && <section className="supervisor-decision"><h3>Decisão final do supervisor</h3><p>{nonconformity.history.some((event) => event.event_type === 'CONTESTATION_ESCALATED') ? 'A NC foi contestada e aguarda a sua palavra final.' : 'O prazo de uma etapa venceu e a decisão foi escalonada para você.'} Decida até {formatDeadline(nonconformity.supervisor_decision_due_at)}.</p><textarea value={supervisorDrafts[nonconformity.id] || ''} onChange={(event) => setSupervisorDrafts((all) => ({ ...all, [nonconformity.id]: event.target.value }))} placeholder="Justificativa da decisão final" /><div><button className="review-button approve" disabled={sending === nonconformity.id} type="button" onClick={() => void decideAsSupervisor(nonconformity, true)}>Encerrar NC</button><button className="review-button return" disabled={sending === nonconformity.id} type="button" onClick={() => void decideAsSupervisor(nonconformity, false)}>Devolver para correção</button></div></section>}
         <details className="lifecycle-history"><summary>Ver ciclo de vida completo ({nonconformity.history.length})</summary><ol>{nonconformity.history.map((event) => <li key={event.id}><strong>{event.event_type.replaceAll('_', ' ')}</strong><span>{event.message}</span><small>{event.actor_email || 'Sistema'} · {formatDeadline(event.created_at)}</small></li>)}</ol></details>
       </article>)}
       <ApiState status={apiStatus} />
@@ -461,11 +467,12 @@ function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits, onOpe
   const averageAdherence = audits.length ? Math.round(audits.reduce((total, audit) => total + (audit.adherence_percentage ?? 0), 0) / audits.length) : null
   const auditedCaseIds = new Set(audits.map((audit) => audit.test_case_id))
   const casesWithoutAudit = cases.filter((testCase) => !auditedCaseIds.has(testCase.id)).length
-  const dueLabel = (dueDate: string | null) => {
-    if (!dueDate) return 'Sem prazo'
+  const dueLabel = (deadline: string | null) => {
+    if (!deadline) return 'Sem prazo ativo'
     const today = new Date()
     today.setHours(0, 0, 0, 0)
-    const due = new Date(`${dueDate}T00:00:00`)
+    const due = new Date(deadline)
+    due.setHours(0, 0, 0, 0)
     const days = Math.round((due.getTime() - today.getTime()) / 86_400_000)
     if (days < 0) return 'Atrasada'
     if (days === 0) return 'Hoje'
@@ -475,9 +482,9 @@ function Dashboard({ apiStatus, user, onLogout, onOpenCases, onOpenAudits, onOpe
   const actions = [
     ...openNonconformities.map((nonconformity) => ({
       id: nonconformity.id,
-      title: nonconformity.status === 'WAITING_VALIDATION' ? `${nonconformity.code} aguarda validação` : `${nonconformity.code} ${statusLabel[nonconformity.status].toLowerCase()}`,
+      title: nonconformity.status === 'WAITING_VALIDATION' ? `${nonconformity.code} aguarda validação` : nonconformity.status === 'ESCALATED' ? `${nonconformity.code} aguarda decisão final` : `${nonconformity.code} ${statusLabel[nonconformity.status].toLowerCase()}`,
       description: `${nonconformity.test_case_code} · ${nonconformity.test_case_title}`,
-      meta: dueLabel(nonconformity.due_date),
+      meta: dueLabel(nonconformity.status === 'WAITING_VALIDATION' ? nonconformity.review_due_at : nonconformity.status === 'ESCALATED' ? nonconformity.supervisor_decision_due_at : nonconformity.resolution_due_at),
       tone: nonconformity.status === 'WAITING_VALIDATION' ? 'violet' : 'red',
     })),
     ...(casesWithoutAudit ? [{ id: 'cases-without-audit', title: 'Casos sem auditoria', description: 'Aguardam a primeira verificação.', meta: `${casesWithoutAudit} caso${casesWithoutAudit === 1 ? '' : 's'}`, tone: 'blue' }] : []),

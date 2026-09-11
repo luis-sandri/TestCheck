@@ -197,6 +197,7 @@ class NonconformityOutput(BaseModel):
     resolution_due_at: datetime | None
     review_due_at: datetime | None
     escalation_due_at: datetime | None
+    supervisor_decision_due_at: datetime | None
     escalated_at: datetime | None
     final_decision: str | None
     can_submit_evidence: bool

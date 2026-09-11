@@ -53,6 +53,7 @@ def ensure_database_ready() -> None:
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS resolution_due_at TIMESTAMP WITH TIME ZONE"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS review_due_at TIMESTAMP WITH TIME ZONE"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS escalation_due_at TIMESTAMP WITH TIME ZONE"))
+            connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS supervisor_decision_due_at TIMESTAMP WITH TIME ZONE"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP WITH TIME ZONE"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS supervisor_email VARCHAR(255)"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS final_decision TEXT"))

@@ -79,3 +79,25 @@ as variáveis de produção abaixo:
 Sem `RESEND_API_KEY`, a aplicação continua registrando as notificações no banco,
 mas não envia mensagens externas. O domínio próprio precisa ser verificado no
 Resend antes de ser usado como remetente.
+
+## SLA e escalonamento de não conformidades
+
+O TestCheck usa prazos em **dias úteis** (segunda a sexta-feira; feriados ainda
+não são considerados no MVP). A prioridade é escolhida pelo revisor ao confirmar
+a não conformidade, e cada etapa recebe um prazo próprio:
+
+| Prioridade | Responsável: corrigir ou contestar | Revisor: aprovar ou reprovar correção | Supervisor: decisão final |
+| --- | --- | --- | --- |
+| Alta | 2 dias úteis | 1 dia útil | 1 dia útil |
+| Média | 5 dias úteis | 2 dias úteis | 2 dias úteis |
+| Baixa | 10 dias úteis | 3 dias úteis | 3 dias úteis |
+
+Se o responsável ou o revisor não cumprir a etapa ativa, a NC é escalada ao
+supervisor. Uma contestação também é encaminhada diretamente para a decisão
+final do supervisor. Todo evento fica registrado no histórico da NC.
+
+O `vercel.json` chama diariamente a rota de escalonamento. Configure
+`CRON_SECRET` como variável de ambiente **Production** na Vercel. Esse valor é
+uma senha técnica entre a Vercel e a rota agendada: a Vercel a envia no cabeçalho
+`Authorization`, e a API só executa o escalonamento se o valor conferir. Assim,
+uma pessoa externa não consegue disparar o processo pelo navegador.

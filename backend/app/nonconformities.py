@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import or_, select
@@ -37,13 +37,11 @@ from .schemas import (
     NonconformityOutput,
     SupervisorDecisionInput,
 )
+from .sla import add_business_days, target_for
 
 
 router = APIRouter(prefix="/nonconformities", tags=["Não conformidades"])
 settings = get_settings()
-
-PRIORITY_SLA_DAYS = {"HIGH": (2, 1, 3), "MEDIUM": (5, 2, 7), "LOW": (10, 3, 14)}
-
 
 def query_nonconformities():
     return select(Nonconformity).options(
@@ -89,7 +87,7 @@ def scenario_for(nonconformity: Nonconformity) -> Scenario | None:
 
 def can_submit(nonconformity: Nonconformity, user: User) -> bool:
     return (
-        nonconformity.status not in {NonconformityStatus.RESOLVED, NonconformityStatus.ESCALATED}
+        nonconformity.status in {NonconformityStatus.OPEN, NonconformityStatus.IN_CORRECTION}
         and (user.role == UserRole.ADMIN or nonconformity.assignee_id == user.id or nonconformity.assignee_email == user.email)
     )
 
@@ -97,8 +95,8 @@ def can_submit(nonconformity: Nonconformity, user: User) -> bool:
 def can_review(nonconformity: Nonconformity, user: User) -> bool:
     scenario = scenario_for(nonconformity)
     if scenario:
-        return nonconformity.status != NonconformityStatus.ESCALATED and scenario.reviewer_email == user.email
-    return nonconformity.status != NonconformityStatus.ESCALATED and (
+        return nonconformity.status == NonconformityStatus.WAITING_VALIDATION and scenario.reviewer_email == user.email
+    return nonconformity.status == NonconformityStatus.WAITING_VALIDATION and (
         user.role == UserRole.ADMIN or nonconformity.audit_item.audit.auditor_id == user.id
     )
 
@@ -135,6 +133,7 @@ def serialize_nonconformity(nonconformity: Nonconformity, user: User) -> Nonconf
         resolution_due_at=nonconformity.resolution_due_at,
         review_due_at=nonconformity.review_due_at,
         escalation_due_at=nonconformity.escalation_due_at,
+        supervisor_decision_due_at=nonconformity.supervisor_decision_due_at,
         escalated_at=nonconformity.escalated_at,
         final_decision=nonconformity.final_decision,
         can_submit_evidence=can_submit(nonconformity, user),
@@ -156,6 +155,47 @@ def serialize_nonconformity(nonconformity: Nonconformity, user: User) -> Nonconf
     )
 
 
+def notify_supervisor(
+    db: Session,
+    nonconformity: Nonconformity,
+    message: str,
+) -> None:
+    notification = Notification(
+        recipient_email=nonconformity.supervisor_email or "",
+        nonconformity_id=nonconformity.id,
+        notification_type=NotificationType.EVIDENCE_REVIEWED,
+        title=f"Decisão final necessária para {nonconformity.code}",
+        message=message,
+    )
+    db.add(notification)
+    send_notification_email(notification, message)
+
+
+def escalate_to_supervisor(
+    db: Session,
+    nonconformity: Nonconformity,
+    now: datetime,
+    event_type: str,
+    message: str,
+    actor_email: str | None = None,
+) -> None:
+    """Entrega a decisão ao supervisor e inicia o SLA da palavra final."""
+
+    previous_status = nonconformity.status
+    nonconformity.status = NonconformityStatus.ESCALATED
+    nonconformity.escalated_at = now
+    nonconformity.escalation_due_at = now
+    nonconformity.supervisor_decision_due_at = add_business_days(
+        now, target_for(nonconformity.severity).supervisor_decision_days
+    )
+    record_history(db, nonconformity, actor_email, event_type, previous_status, message)
+    notify_supervisor(
+        db,
+        nonconformity,
+        f"{message} Registre a decisão final até {nonconformity.supervisor_decision_due_at.date().isoformat()}.",
+    )
+
+
 def escalate_overdue_nonconformities(db: Session) -> None:
     """Aplica o escalonamento pendente quando a API é consultada.
 
@@ -164,35 +204,46 @@ def escalate_overdue_nonconformities(db: Session) -> None:
     """
     now = datetime.now(UTC)
     candidates = db.scalars(
-        query_nonconformities().where(
-            Nonconformity.status.notin_([NonconformityStatus.RESOLVED, NonconformityStatus.ESCALATED]),
-            Nonconformity.escalation_due_at.is_not(None),
-            Nonconformity.escalation_due_at <= now,
-        )
+        query_nonconformities().where(Nonconformity.status != NonconformityStatus.RESOLVED)
     ).all()
+    changed = False
     for nonconformity in candidates:
-        previous_status = nonconformity.status
-        nonconformity.status = NonconformityStatus.ESCALATED
-        nonconformity.escalated_at = now
-        record_history(
-            db,
-            nonconformity,
-            None,
-            "ESCALATED",
-            previous_status,
-            "Prazo de escalonamento vencido; decisão encaminhada ao supervisor.",
-        )
-        notification = Notification(
-            recipient_email=nonconformity.supervisor_email or "",
-            nonconformity_id=nonconformity.id,
-            notification_type=NotificationType.EVIDENCE_REVIEWED,
-            title=f"Decisão final necessária para {nonconformity.code}",
-            message="O prazo da não conformidade venceu e a decisão final foi escalonada para você.",
-        )
-        db.add(notification)
-        send_notification_email(notification, notification.message)
-    if candidates:
+        if nonconformity.status in {NonconformityStatus.OPEN, NonconformityStatus.IN_CORRECTION, NonconformityStatus.CONTESTED}:
+            active_deadline = nonconformity.resolution_due_at
+            overdue_message = "O prazo para corrigir ou contestar venceu; decisão encaminhada ao supervisor."
+        elif nonconformity.status == NonconformityStatus.WAITING_VALIDATION:
+            active_deadline = nonconformity.review_due_at
+            overdue_message = "O prazo de aprovação ou reprovação venceu; decisão encaminhada ao supervisor."
+        else:
+            active_deadline = None
+            overdue_message = ""
+        if active_deadline and active_deadline <= now:
+            escalate_to_supervisor(db, nonconformity, now, "ESCALATED", overdue_message)
+            changed = True
+            continue
+        if (
+            nonconformity.status == NonconformityStatus.ESCALATED
+            and nonconformity.supervisor_decision_due_at
+            and nonconformity.supervisor_decision_due_at <= now
+            and not any(event.event_type == "SUPERVISOR_DEADLINE_OVERDUE" for event in nonconformity.history)
+        ):
+            record_history(
+                db,
+                nonconformity,
+                None,
+                "SUPERVISOR_DEADLINE_OVERDUE",
+                NonconformityStatus.ESCALATED,
+                "O prazo da decisão final do supervisor venceu; pendência mantida em destaque.",
+            )
+            notify_supervisor(
+                db,
+                nonconformity,
+                "O prazo da decisão final venceu. A não conformidade continua aguardando sua decisão.",
+            )
+            changed = True
+    if changed:
         db.commit()
+        db.expire_all()
 
 
 @router.get("", response_model=list[NonconformityOutput])
@@ -237,7 +288,20 @@ def retry_notification(
     nonconformity = get_nonconformity_or_404(nonconformity_id, db)
     if not (can_submit(nonconformity, current_user) or can_review(nonconformity, current_user) or can_decide_final(nonconformity, current_user)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Você não pode reenviar esta notificação.")
-    recipient = nonconformity.supervisor_email if nonconformity.status == NonconformityStatus.ESCALATED else nonconformity.assignee_email
+    scenario = scenario_for(nonconformity)
+    recipient = (
+        nonconformity.supervisor_email
+        if nonconformity.status == NonconformityStatus.ESCALATED
+        else (
+            scenario.reviewer_email
+            if nonconformity.status == NonconformityStatus.WAITING_VALIDATION and scenario
+            else (
+                nonconformity.audit_item.audit.auditor.email
+                if nonconformity.status == NonconformityStatus.WAITING_VALIDATION
+                else nonconformity.assignee_email
+            )
+        )
+    )
     notification = Notification(
         recipient_email=recipient or "",
         nonconformity_id=nonconformity.id,
@@ -272,16 +336,32 @@ def submit_evidence(
     )
     db.add(evidence)
     previous_status = nonconformity.status
-    nonconformity.status = NonconformityStatus.CONTESTED if payload.evidence_type == EvidenceType.CONTESTATION else NonconformityStatus.WAITING_VALIDATION
-    _resolution_days, review_days, _escalation_days = PRIORITY_SLA_DAYS[nonconformity.severity.value]
-    nonconformity.review_due_at = datetime.now(UTC) + timedelta(days=review_days)
+    now = datetime.now(UTC)
+    if payload.evidence_type == EvidenceType.CONTESTATION:
+        escalate_to_supervisor(
+            db,
+            nonconformity,
+            now,
+            "CONTESTATION_ESCALATED",
+            "Contestação enviada; a palavra final foi encaminhada ao supervisor.",
+            current_user.email,
+        )
+        db.commit()
+        db.expire_all()
+        return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)
+
+    nonconformity.status = NonconformityStatus.WAITING_VALIDATION
+    nonconformity.review_due_at = add_business_days(
+        now, target_for(nonconformity.severity).reviewer_decision_days
+    )
+    nonconformity.escalation_due_at = nonconformity.review_due_at
     record_history(
         db,
         nonconformity,
         current_user.email,
-        "CONTESTED" if payload.evidence_type == EvidenceType.CONTESTATION else "CORRECTION_SUBMITTED",
+        "CORRECTION_SUBMITTED",
         previous_status,
-        "Contestação enviada para análise." if payload.evidence_type == EvidenceType.CONTESTATION else "Evidência de correção enviada para validação.",
+        "Evidência de correção enviada para validação.",
     )
     scenario = scenario_for(nonconformity)
     reviewer_email = scenario.reviewer_email if scenario else nonconformity.audit_item.audit.auditor.email
@@ -323,12 +403,17 @@ def review_evidence(
     if payload.approved:
         nonconformity.status = NonconformityStatus.RESOLVED
         nonconformity.resolved_at = datetime.now(UTC)
+        nonconformity.review_due_at = None
     else:
         nonconformity.status = NonconformityStatus.IN_CORRECTION
-        resolution_days, _review_days, escalation_days = PRIORITY_SLA_DAYS[nonconformity.severity.value]
         now = datetime.now(UTC)
-        nonconformity.resolution_due_at = now + timedelta(days=resolution_days)
-        nonconformity.escalation_due_at = now + timedelta(days=escalation_days)
+        nonconformity.resolution_due_at = add_business_days(
+            now, target_for(nonconformity.severity).correction_or_contestation_days
+        )
+        nonconformity.due_date = nonconformity.resolution_due_at.date()
+        nonconformity.review_due_at = None
+        nonconformity.escalation_due_at = nonconformity.resolution_due_at
+        nonconformity.supervisor_decision_due_at = None
     record_history(
         db,
         nonconformity,
@@ -370,10 +455,14 @@ def supervisor_decision(
         message = "Supervisor aceitou a entrega ou contestação e encerrou a NC."
     else:
         nonconformity.status = NonconformityStatus.IN_CORRECTION
-        resolution_days, _review_days, escalation_days = PRIORITY_SLA_DAYS[nonconformity.severity.value]
         now = datetime.now(UTC)
-        nonconformity.resolution_due_at = now + timedelta(days=resolution_days)
-        nonconformity.escalation_due_at = now + timedelta(days=escalation_days)
+        nonconformity.resolution_due_at = add_business_days(
+            now, target_for(nonconformity.severity).correction_or_contestation_days
+        )
+        nonconformity.due_date = nonconformity.resolution_due_at.date()
+        nonconformity.review_due_at = None
+        nonconformity.escalation_due_at = nonconformity.resolution_due_at
+        nonconformity.supervisor_decision_due_at = None
         message = "Supervisor manteve a NC e devolveu para correção final."
     record_history(db, nonconformity, current_user.email, "SUPERVISOR_DECISION", previous_status, message)
     db.add(

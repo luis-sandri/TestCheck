@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
@@ -25,6 +25,7 @@ from .models import (
     User,
 )
 from .schemas import AuditItemOutput, AuditOutput, AuditReviewInput, AuditStartInput
+from .sla import add_business_days, target_for
 
 
 router = APIRouter(prefix="/audits", tags=["Auditorias"])
@@ -37,14 +38,6 @@ CHECKLIST = (
     ("EXPECTED_RESULT", "Resultado esperado", "expected_result"),
     ("APPROVAL_CRITERIA", "Critério de aprovação", "approval_criteria"),
 )
-
-# Dias para resolver/contestar, para o revisor analisar e para escalar ao supervisor.
-PRIORITY_SLA_DAYS = {
-    NonconformitySeverity.HIGH: (2, 1, 3),
-    NonconformitySeverity.MEDIUM: (5, 2, 7),
-    NonconformitySeverity.LOW: (10, 3, 14),
-}
-
 
 def audit_query():
     return select(Audit).options(
@@ -192,7 +185,8 @@ def review_audit(
 
         priority = review_item.priority
         assert priority is not None
-        resolution_days, _review_days, escalation_days = PRIORITY_SLA_DAYS[priority]
+        sla = target_for(priority)
+        resolution_due_at = add_business_days(now, sla.correction_or_contestation_days)
         nonconformity = Nonconformity(
             code=next_nc_code(db),
             test_case_id=audit.test_case_id,
@@ -200,9 +194,9 @@ def review_audit(
             assignee_email=audit.test_case.responsible_email or audit.test_case.author.email,
             description=f"{audit_item.checklist_label} não conforme no caso {audit.test_case.code}: {audit.test_case.title}.",
             severity=priority,
-            due_date=(now + timedelta(days=resolution_days)).date(),
-            resolution_due_at=now + timedelta(days=resolution_days),
-            escalation_due_at=now + timedelta(days=escalation_days),
+            due_date=resolution_due_at.date(),
+            resolution_due_at=resolution_due_at,
+            escalation_due_at=resolution_due_at,
             supervisor_email=scenario.supervisor_email,
         )
         db.add(nonconformity)

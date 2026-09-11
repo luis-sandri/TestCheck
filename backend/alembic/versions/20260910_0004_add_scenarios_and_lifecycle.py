@@ -33,6 +33,7 @@ def upgrade() -> None:
     op.add_column("nonconformities", sa.Column("resolution_due_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("nonconformities", sa.Column("review_due_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("nonconformities", sa.Column("escalation_due_at", sa.DateTime(timezone=True), nullable=True))
+    op.add_column("nonconformities", sa.Column("supervisor_decision_due_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("nonconformities", sa.Column("escalated_at", sa.DateTime(timezone=True), nullable=True))
     op.add_column("nonconformities", sa.Column("supervisor_email", sa.String(length=255), nullable=True))
     op.add_column("nonconformities", sa.Column("final_decision", sa.Text(), nullable=True))
@@ -51,7 +52,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("nonconformity_history")
-    for column in ("final_decision", "supervisor_email", "escalated_at", "escalation_due_at", "review_due_at", "resolution_due_at"):
+    for column in ("final_decision", "supervisor_email", "escalated_at", "supervisor_decision_due_at", "escalation_due_at", "review_due_at", "resolution_due_at"):
         op.drop_column("nonconformities", column)
     op.drop_column("audit_items", "final_result")
     op.drop_column("audit_items", "suggested_result")
