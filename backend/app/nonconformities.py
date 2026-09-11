@@ -124,6 +124,8 @@ def serialize_nonconformity(nonconformity: Nonconformity, user: User) -> Nonconf
         code=nonconformity.code,
         test_case_code=nonconformity.test_case.code,
         test_case_title=nonconformity.test_case.title,
+        scenario_id=nonconformity.test_case.scenario_id,
+        scenario_name=nonconformity.test_case.scenario.name if nonconformity.test_case.scenario else None,
         description=nonconformity.description,
         severity=nonconformity.severity,
         status=nonconformity.status,

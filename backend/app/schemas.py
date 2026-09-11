@@ -120,6 +120,8 @@ class AuditOutput(BaseModel):
     test_case_id: str
     test_case_code: str
     test_case_title: str
+    scenario_id: str | None
+    scenario_name: str | None
     auditor_name: str
     status: AuditStatus
     adherence_percentage: int | None
@@ -188,6 +190,8 @@ class NonconformityOutput(BaseModel):
     code: str
     test_case_code: str
     test_case_title: str
+    scenario_id: str | None
+    scenario_name: str | None
     description: str
     severity: NonconformitySeverity
     status: NonconformityStatus

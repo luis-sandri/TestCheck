@@ -83,6 +83,8 @@ def serialize_audit(audit: Audit, user: User) -> AuditOutput:
         test_case_id=audit.test_case_id,
         test_case_code=audit.test_case.code,
         test_case_title=audit.test_case.title,
+        scenario_id=audit.test_case.scenario_id,
+        scenario_name=audit.test_case.scenario.name if audit.test_case.scenario else None,
         auditor_name=audit.auditor.full_name,
         status=audit.status,
         adherence_percentage=audit.adherence_percentage,
@@ -120,6 +122,17 @@ def run_audit(
     current_user: User = Depends(get_current_user),
 ) -> AuditOutput:
     test_case = get_test_case_or_404(payload.test_case_id, db)
+    pending_audit = db.scalar(
+        select(Audit).where(
+            Audit.test_case_id == test_case.id,
+            Audit.status == AuditStatus.DRAFT,
+        )
+    )
+    if pending_audit is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este caso já possui uma auditoria aguardando revisão.",
+        )
     audit = Audit(test_case_id=test_case.id, auditor_id=current_user.id, status=AuditStatus.DRAFT)
     db.add(audit)
     db.flush()

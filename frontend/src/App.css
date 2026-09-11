@@ -345,6 +345,43 @@ main {
   gap: 24px;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.scenario-filter {
+  display: grid;
+  min-width: 224px;
+  gap: 5px;
+  color: #4b5e50;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.scenario-filter select,
+.audit-modal-controls select {
+  width: 100%;
+  min-height: 44px;
+  border: 1px solid #cddbd0;
+  border-radius: 9px;
+  padding: 0 11px;
+  color: #253a2b;
+  background: var(--surface);
+  font: inherit;
+  font-size: 14px;
+  outline: none;
+}
+
+.scenario-filter select:focus,
+.audit-modal-controls select:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(20, 83, 45, 0.14);
+}
+
 .eyebrow {
   margin: 0 0 7px;
   color: var(--primary);
@@ -584,6 +621,27 @@ textarea:focus-visible {
 
 .table-wrap {
   overflow-x: auto;
+}
+
+.audit-table-panel {
+  margin-top: 34px;
+  overflow: hidden;
+}
+
+.audit-table td {
+  vertical-align: middle;
+}
+
+.audit-table th:last-child,
+.audit-table td:last-child {
+  text-align: right;
+}
+
+.table-action {
+  min-height: 38px;
+  padding-inline: 13px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 table {
@@ -1529,6 +1587,106 @@ td strong {
   line-height: 1.55;
 }
 
+.audit-review-modal {
+  width: min(100%, 900px);
+  max-height: min(88vh, 780px);
+  overflow: auto;
+  padding: 26px;
+  border: 1px solid #d7e4da;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 24px 60px rgba(9, 35, 18, 0.28);
+}
+
+.modal-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+  padding-bottom: 17px;
+  border-bottom: 1px solid #e1e9e2;
+}
+
+.modal-heading .eyebrow {
+  margin-bottom: 6px;
+}
+
+.modal-heading h2 {
+  margin: 0;
+  color: #173122;
+  font-size: 21px;
+}
+
+.modal-heading p:not(.eyebrow) {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.modal-close {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  flex: 0 0 36px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid #d6e1d8;
+  border-radius: 9px;
+  cursor: pointer;
+  color: #355342;
+  background: #f8fbf8;
+  font-size: 24px;
+  line-height: 1;
+}
+
+.modal-close:hover { background: #e9f3eb; }
+
+.modal-close:focus-visible {
+  outline: 3px solid rgba(20, 83, 45, 0.32);
+  outline-offset: 3px;
+}
+
+.audit-modal-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.audit-modal-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(214px, 0.46fr);
+  align-items: center;
+  gap: 18px;
+  padding: 15px;
+  border: 1px solid #dfe9e1;
+  border-radius: 11px;
+  background: #fbfdfb;
+}
+
+.audit-modal-item > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.audit-modal-item strong { color: #253a2b; font-size: 14px; }
+.audit-modal-item span { color: #637667; font-size: 13px; }
+.audit-modal-item small { color: #708075; font-size: 12px; line-height: 1.45; }
+
+.audit-modal-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.audit-modal-controls select {
+  min-height: 39px;
+  font-size: 13px;
+}
+
+.audit-modal-item > .status {
+  justify-self: end;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -1619,6 +1777,12 @@ textarea::placeholder {
   .brand { padding-bottom: 22px; }
   main { padding: 26px 16px 36px; }
   .topbar { flex-direction: column; }
+  .topbar-actions { width: 100%; align-items: stretch; }
+  .scenario-filter { width: 100%; }
+  .audit-modal-item { grid-template-columns: 1fr; gap: 12px; }
+  .audit-modal-item > .status { justify-self: start; }
+  .audit-review-modal { max-height: 90vh; padding: 20px; }
+  .modal-heading h2 { font-size: 19px; }
   .primary-button { width: 100%; justify-content: center; }
   .audit-case .primary-button { width: auto; }
   .metrics { grid-template-columns: 1fr; }
