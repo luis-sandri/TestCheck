@@ -1352,6 +1352,33 @@ td strong {
   font-weight: 600;
 }
 
+.optional-label {
+  display: inline-flex;
+  margin-left: 6px;
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: #466353;
+  background: #e8f2ea;
+  font-size: 11px;
+  font-weight: 750;
+  vertical-align: middle;
+}
+
+.workflow-summary {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding: 13px;
+  border: 1px solid #cfe0d2;
+  border-radius: 10px;
+  color: #496351;
+  background: #f7fbf8;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.workflow-summary strong { color: #254532; font-size: 14px; }
+
 .form-fields textarea.steps-editor {
   min-height: 130px;
   font-family: ui-monospace, SFMono-Regular, Consolas, monospace;

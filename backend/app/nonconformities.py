@@ -85,6 +85,13 @@ def scenario_for(nonconformity: Nonconformity) -> Scenario | None:
     return nonconformity.test_case.scenario
 
 
+def reviewer_email_for(nonconformity: Nonconformity) -> str:
+    scenario = scenario_for(nonconformity)
+    if scenario:
+        return scenario.reviewer_email
+    return nonconformity.test_case.reviewer_email or nonconformity.audit_item.audit.auditor.email
+
+
 def can_submit(nonconformity: Nonconformity, user: User) -> bool:
     return (
         nonconformity.status in {NonconformityStatus.OPEN, NonconformityStatus.IN_CORRECTION}
@@ -93,11 +100,8 @@ def can_submit(nonconformity: Nonconformity, user: User) -> bool:
 
 
 def can_review(nonconformity: Nonconformity, user: User) -> bool:
-    scenario = scenario_for(nonconformity)
-    if scenario:
-        return nonconformity.status == NonconformityStatus.WAITING_VALIDATION and scenario.reviewer_email == user.email
     return nonconformity.status == NonconformityStatus.WAITING_VALIDATION and (
-        user.role == UserRole.ADMIN or nonconformity.audit_item.audit.auditor_id == user.id
+        user.role == UserRole.ADMIN or reviewer_email_for(nonconformity) == user.email
     )
 
 
@@ -262,6 +266,7 @@ def list_nonconformities(
                 Nonconformity.assignee_email == current_user.email,
                 Nonconformity.supervisor_email == current_user.email,
                 Nonconformity.test_case.has(TestCase.scenario.has(Scenario.reviewer_email == current_user.email)),
+                Nonconformity.test_case.has(TestCase.reviewer_email == current_user.email),
             )
         )
     nonconformities = db.scalars(statement).all()
@@ -290,18 +295,13 @@ def retry_notification(
     nonconformity = get_nonconformity_or_404(nonconformity_id, db)
     if not (can_submit(nonconformity, current_user) or can_review(nonconformity, current_user) or can_decide_final(nonconformity, current_user)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Você não pode reenviar esta notificação.")
-    scenario = scenario_for(nonconformity)
     recipient = (
         nonconformity.supervisor_email
         if nonconformity.status == NonconformityStatus.ESCALATED
         else (
-            scenario.reviewer_email
-            if nonconformity.status == NonconformityStatus.WAITING_VALIDATION and scenario
-            else (
-                nonconformity.audit_item.audit.auditor.email
-                if nonconformity.status == NonconformityStatus.WAITING_VALIDATION
-                else nonconformity.assignee_email
-            )
+            reviewer_email_for(nonconformity)
+            if nonconformity.status == NonconformityStatus.WAITING_VALIDATION
+            else nonconformity.assignee_email
         )
     )
     notification = Notification(
@@ -365,8 +365,7 @@ def submit_evidence(
         previous_status,
         "Evidência de correção enviada para validação.",
     )
-    scenario = scenario_for(nonconformity)
-    reviewer_email = scenario.reviewer_email if scenario else nonconformity.audit_item.audit.auditor.email
+    reviewer_email = reviewer_email_for(nonconformity)
     notification = Notification(
         recipient_email=reviewer_email,
         nonconformity_id=nonconformity.id,
@@ -391,7 +390,7 @@ def review_evidence(
     escalate_overdue_nonconformities(db)
     nonconformity = get_nonconformity_or_404(nonconformity_id, db)
     if not can_review(nonconformity, current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o revisor do cenário pode validar esta evidência.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o revisor definido para o caso pode validar esta evidência.")
     evidence = next((item for item in nonconformity.evidences if item.id == payload.evidence_id), None)
     if evidence is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Evidência não encontrada nesta NC.")

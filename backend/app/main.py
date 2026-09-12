@@ -47,6 +47,8 @@ def ensure_database_ready() -> None:
             connection.execute(
                 text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS responsible_email VARCHAR(255)")
             )
+            connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS reviewer_email VARCHAR(255)"))
+            connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS supervisor_email VARCHAR(255)"))
             connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS scenario_id VARCHAR(36)"))
             connection.execute(text("ALTER TABLE audit_items ADD COLUMN IF NOT EXISTS suggested_result VARCHAR(32)"))
             connection.execute(text("ALTER TABLE audit_items ADD COLUMN IF NOT EXISTS final_result VARCHAR(32)"))

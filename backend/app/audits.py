@@ -68,7 +68,13 @@ def get_audit_or_404(audit_id: str, db: Session) -> Audit:
 
 def can_review(audit: Audit, user: User) -> bool:
     scenario = audit.test_case.scenario
-    return scenario.reviewer_email == user.email if scenario else audit.auditor_id == user.id
+    reviewer_email = scenario.reviewer_email if scenario else audit.test_case.reviewer_email
+    return reviewer_email == user.email if reviewer_email else audit.auditor_id == user.id
+
+
+def supervisor_email_for(audit: Audit) -> str | None:
+    scenario = audit.test_case.scenario
+    return scenario.supervisor_email if scenario else audit.test_case.supervisor_email
 
 
 def next_nc_code(db: Session) -> str:
@@ -168,17 +174,17 @@ def review_audit(
     if audit.status != AuditStatus.DRAFT:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esta auditoria já foi revisada.")
     if not can_review(audit, current_user):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o revisor definido para o cenário pode finalizar a auditoria.")
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o revisor definido para o caso pode finalizar a auditoria.")
 
     results_by_code = {item.checklist_code: item for item in payload.items}
     expected_codes = {item.checklist_code for item in audit.items}
     if set(results_by_code) != expected_codes:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Revise todos os itens do checklist antes de finalizar.")
-    scenario = audit.test_case.scenario
-    if scenario is None:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Vincule o caso a um cenário com supervisor antes de finalizar a auditoria.")
-    if scenario.supervisor_email in {audit.test_case.author.email, audit.test_case.responsible_email, audit.auditor.email}:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O supervisor do cenário deve ser diferente do autor, responsável e auditor do caso.")
+    supervisor_email = supervisor_email_for(audit)
+    if not supervisor_email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Defina um supervisor no caso ou no cenário antes de finalizar a auditoria.")
+    if supervisor_email in {audit.test_case.author.email, audit.test_case.responsible_email, audit.auditor.email}:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O supervisor deve ser diferente do autor, responsável e auditor do caso.")
 
     now = datetime.now(UTC)
     applicable_items = 0
@@ -210,7 +216,7 @@ def review_audit(
             due_date=resolution_due_at.date(),
             resolution_due_at=resolution_due_at,
             escalation_due_at=resolution_due_at,
-            supervisor_email=scenario.supervisor_email,
+            supervisor_email=supervisor_email,
         )
         db.add(nonconformity)
         db.flush()

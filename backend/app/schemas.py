@@ -53,6 +53,8 @@ class TestCaseInput(BaseModel):
     title: str = Field(min_length=3, max_length=180)
     scenario_id: str | None = Field(default=None, max_length=36)
     responsible_email: str = Field(default="", max_length=255)
+    reviewer_email: str = Field(default="", max_length=255)
+    supervisor_email: str = Field(default="", max_length=255)
     description: str = Field(default="", max_length=10_000)
     preconditions: str = Field(default="", max_length=10_000)
     steps: str = Field(default="", max_length=20_000)
@@ -63,6 +65,8 @@ class TestCaseInput(BaseModel):
     @field_validator(
         "title",
         "responsible_email",
+        "reviewer_email",
+        "supervisor_email",
         "description",
         "preconditions",
         "steps",
@@ -74,12 +78,12 @@ class TestCaseInput(BaseModel):
     def trim_text(cls, value: str) -> str:
         return value.strip()
 
-    @field_validator("responsible_email")
+    @field_validator("responsible_email", "reviewer_email", "supervisor_email")
     @classmethod
-    def clean_responsible_email(cls, value: str) -> str:
+    def clean_workflow_email(cls, value: str) -> str:
         email = value.strip().lower()
         if email and ("@" not in email or email.startswith("@") or email.endswith("@")):
-            raise ValueError("Informe um e-mail válido para o responsável.")
+            raise ValueError("Informe um e-mail válido.")
         return email
 
 
@@ -96,6 +100,8 @@ class TestCaseOutput(BaseModel):
     author_id: str
     author_name: str
     responsible_email: str
+    reviewer_email: str
+    supervisor_email: str
     scenario_id: str | None
     scenario_name: str | None
     created_at: datetime
