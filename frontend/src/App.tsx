@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { FormEvent, KeyboardEvent, MouseEvent } from 'react'
 import './App.css'
 
@@ -33,9 +33,9 @@ function initials(name: string) {
 }
 
 function ApiState({ status }: { status: ApiStatus }) {
+  if (status === 'online') return null
   return <div className={`api-state ${status}`}><span />
     {status === 'checking' && 'Verificando conexão com a API…'}
-    {status === 'online' && 'API e banco de dados conectados'}
     {status === 'offline' && 'Não foi possível conectar à API'}
   </div>
 }
@@ -81,13 +81,17 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
     setIsLeaving(false)
     const timeout = window.setTimeout(() => setIsLeaving(true), 5000)
     return () => window.clearTimeout(timeout)
-  }, [message, onDismiss])
+  }, [message])
 
   if (!message) return null
-  const isError = /não foi possível|recusou|descreva/i.test(message)
-  return <div className={`toast-notification ${isError ? 'error' : 'success'} ${isLeaving ? 'is-leaving' : ''}`} role="status" aria-live="polite" onAnimationEnd={() => { if (isLeaving) onDismiss() }}>
-    <span className="toast-icon" aria-hidden="true">{isError ? '!' : '✓'}</span>
-    <p>{message}</p>
+  const isError = /não foi possível|recusou|descreva|selecione|informe|registre|somente|precisa|obrigat|inválid|diferente|falh|erro/i.test(message)
+  const isInfo = !isError && /sugestões automáticas|aguardando|configurar|consulte/i.test(message)
+  const tone = isError ? 'error' : isInfo ? 'info' : 'success'
+  const label = isError ? 'Não foi possível concluir' : isInfo ? 'Atenção' : 'Concluído'
+  const icon = isError ? '!' : isInfo ? 'i' : '✓'
+  return <div className={`toast-notification ${tone} ${isLeaving ? 'is-leaving' : ''}`} role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'} onAnimationEnd={() => { if (isLeaving) onDismiss() }}>
+    <span className="toast-icon" aria-hidden="true">{icon}</span>
+    <div><strong>{label}</strong><p>{message}</p></div>
     <button type="button" aria-label="Fechar aviso" onClick={onDismiss}>×</button>
   </div>
 }
@@ -185,6 +189,10 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   const [reviewerEmail, setReviewerEmail] = useState(user.email)
   const [supervisorEmail, setSupervisorEmail] = useState('')
   const [importing, setImporting] = useState(false)
+  const [showCaseEditor, setShowCaseEditor] = useState(false)
+  const [showImportPanel, setShowImportPanel] = useState(false)
+  const caseEditorRef = useRef<HTMLFormElement>(null)
+  const importPanelRef = useRef<HTMLFormElement>(null)
 
   const loadCases = async () => {
     setLoading(true)
@@ -216,6 +224,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
       setZephyrFile(null)
       await loadCases()
       await onScenariosChanged()
+      setShowImportPanel(false)
       setMessage(`${result.imported_cases ?? 0} caso(s) importado(s) e organizado(s) por cenário.`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível importar o arquivo.') } finally { setImporting(false) }
   }
@@ -248,11 +257,24 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     const { id, code, author_name, scenario_name, ...values } = testCase
     setEditingId(id)
     setForm({ ...values, scenario_id: values.scenario_id || '' })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setShowCaseEditor(true)
+    window.requestAnimationFrame(() => caseEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
   const reset = () => { setEditingId(null); setForm(blankTestCase(user.email)); setMessage('') }
+  const openNewCase = () => {
+    reset()
+    setShowCaseEditor(true)
+    window.requestAnimationFrame(() => caseEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+  const toggleImportPanel = () => {
+    if (showImportPanel) { setShowImportPanel(false); return }
+    setShowImportPanel(true)
+    window.requestAnimationFrame(() => importPanelRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
+  const closeCaseEditor = () => { reset(); setShowCaseEditor(false) }
   const save = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const wasEditing = Boolean(editingId)
     setSaving(true)
     setMessage('')
     try {
@@ -261,32 +283,33 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.detail || 'Não foi possível salvar.')
-      reset()
+      closeCaseEditor()
       await loadCases()
-      setMessage(editingId ? 'Caso de teste atualizado.' : 'Caso de teste criado.')
+      setMessage(wasEditing ? 'Caso de teste atualizado.' : 'Caso de teste criado.')
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível salvar.') } finally { setSaving(false) }
   }
   const remove = async (testCase: TestCaseData) => {
     const response = await fetch(`/api/test-cases/${testCase.id}`, { method: 'DELETE', credentials: 'include' })
-    if (response.ok) { if (editingId === testCase.id) reset(); await loadCases(); setMessage('Caso de teste excluído.'); setCaseToDelete(null) }
+    if (response.ok) { if (editingId === testCase.id) closeCaseEditor(); await loadCases(); setMessage('Caso de teste excluído.'); setCaseToDelete(null) }
     else { const payload = await response.json().catch(() => ({})); setMessage(payload.detail || 'Não foi possível excluir.') }
   }
   const visibleScenarios = selectedScenarioId ? scenarios.filter((scenario) => scenario.id === selectedScenarioId) : scenarios
   const visibleCases = selectedScenarioId ? cases.filter((testCase) => testCase.scenario_id === selectedScenarioId) : cases
 
   return <div className="app-shell"><Sidebar active="test-cases" user={user} onDashboard={onBack} onCases={() => undefined} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
-    <header className="topbar"><div><p className="eyebrow">CASOS E CENÁRIOS</p><h1>Cenários e casos de teste</h1><p className="subtitle">Crie um caso geral ou associe-o a um cenário importado do Zephyr.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /><button className="primary-button" type="button" onClick={reset}>＋ Novo caso</button></div></header>
-    <section className="scenario-workspace"><form className="panel scenario-import" onSubmit={importZephyr}><div className="panel-header"><div><h2>Importar exportação do Zephyr <span className="optional-label">Opcional</span></h2><p>Use um CSV quando quiser criar cenários pelos folders de origem e agrupar os casos automaticamente.</p></div></div><div className="form-fields compact-fields"><label>Arquivo CSV do Zephyr *<input type="file" accept=".csv,text/csv" required onChange={(event) => setZephyrFile(event.target.files?.[0] || null)} /></label><label>Revisor do cenário *<input type="email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} required /></label><label>Supervisor para escalonamento *<input type="email" value={supervisorEmail} onChange={(event) => setSupervisorEmail(event.target.value)} placeholder="supervisor@exemplo.com" required /></label></div><div className="form-actions"><button className="primary-button" disabled={importing} type="submit">{importing ? 'Importando…' : 'Importar e criar cenários'}</button></div></form>
-      <aside className="panel scenario-list"><div className="panel-header"><div><h2>Cenários importados</h2><p>{loading ? 'Carregando…' : `${visibleScenarios.length} cenário(s) organizado(s) por folder.`}</p></div></div><div className="scenario-list-content">{!loading && visibleScenarios.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum cenário corresponde ao filtro atual.' : 'Importe um CSV do Zephyr para criar o primeiro cenário.'}</p>}{visibleScenarios.map((scenario) => <article className="scenario-summary" key={scenario.id}><strong>{scenario.name}</strong><span>{scenario.test_case_count} caso(s) · {scenario.zephyr_folder}</span><small>Revisor: {scenario.reviewer_email}<br />Supervisor: {scenario.supervisor_email}</small></article>)}</div></aside></section>
-    <section className="case-workspace"><form className="panel case-form" onSubmit={save}>
+    <header className="topbar"><div><p className="eyebrow">CASOS E CENÁRIOS</p><h1>Cenários e casos de teste</h1><p className="subtitle">Crie casos gerais ou organize os casos importados em cenários do Zephyr.</p></div><div className="topbar-actions case-topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /><button className="secondary-button" type="button" aria-expanded={showImportPanel} aria-controls="zephyr-import-panel" onClick={toggleImportPanel}>Importar do Zephyr <span aria-hidden="true">{showImportPanel ? '⌃' : '⌄'}</span></button><button className="primary-button" type="button" onClick={openNewCase}>＋ Criar caso</button></div></header>
+    <section className={`case-workspace ${showCaseEditor ? '' : 'list-only'}`}>
+    {showCaseEditor && <form className="panel case-form" ref={caseEditorRef} onSubmit={save}>
       <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco geram apenas uma sugestão; o revisor decide o resultado final.</p></div></div>
       <div className="form-fields"><label>Cenário <span className="field-hint">Opcional. Sem cenário, o caso é geral.</span><select value={form.scenario_id || ''} onChange={(event) => setField('scenario_id', event.target.value)}><option value="">Geral (sem cenário)</option>{scenarios.map((scenario) => <option value={scenario.id} key={scenario.id}>{scenario.name}</option>)}</select></label><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pelo caso * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label>{form.scenario_id ? <p className="workflow-summary"><strong>Papéis definidos pelo cenário</strong><span>Revisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.reviewer_email || form.reviewer_email}</span><span>Supervisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.supervisor_email || form.supervisor_email}</span></p> : <><label>Revisor * <span className="field-hint">Define o resultado final da auditoria e valida correções.</span><input type="email" value={form.reviewer_email} onChange={(event) => setField('reviewer_email', event.target.value)} placeholder="revisor@exemplo.com" required /></label><label>Supervisor * <span className="field-hint">Decide quando uma NC for contestada ou escalada.</span><input type="email" value={form.supervisor_email} onChange={(event) => setField('supervisor_email', event.target.value)} placeholder="supervisor@exemplo.com" required /></label></>}<label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
-      <div className="form-actions"><button className="text-button" type="button" onClick={reset}>Cancelar</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
-    </form>
+      <div className="form-actions"><button className="text-button" type="button" onClick={closeCaseEditor}>{editingId ? 'Cancelar edição' : 'Cancelar criação'}</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
+    </form>}
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${visibleCases.length} caso(s) no filtro atual.`}</p></div></div>
       <div className="case-list-content">{!loading && visibleCases.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Ainda não há casos de teste. Crie um caso geral ou importe um CSV do Zephyr.'}</p>}{visibleCases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Cenário: {testCase.scenario_name || 'Geral'}</p><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p><p>Revisor: {testCase.reviewer_email}</p><p>Supervisor: {testCase.supervisor_email || 'não definido'}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
+    {showImportPanel && <form className="panel zephyr-import-panel" id="zephyr-import-panel" ref={importPanelRef} onSubmit={importZephyr}><div className="panel-header"><div><p className="eyebrow">IMPORTAÇÃO OPCIONAL</p><h2>Importar exportação do Zephyr</h2><p>Envie o CSV somente quando quiser criar cenários pelos folders de origem e agrupar os casos automaticamente.</p></div></div><div className="form-fields compact-fields"><label>Arquivo CSV do Zephyr *<input type="file" accept=".csv,text/csv" required onChange={(event) => setZephyrFile(event.target.files?.[0] || null)} /></label><label>Revisor do cenário *<input type="email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} required /></label><label>Supervisor para escalonamento *<input type="email" value={supervisorEmail} onChange={(event) => setSupervisorEmail(event.target.value)} placeholder="supervisor@exemplo.com" required /></label></div><div className="form-actions"><button className="text-button" type="button" onClick={() => setShowImportPanel(false)}>Cancelar importação</button><button className="primary-button" disabled={importing} type="submit">{importing ? 'Importando…' : 'Importar e criar cenários'}</button></div></form>}
+    <section className="panel scenario-list"><div className="panel-header"><div><h2>Cenários importados</h2><p>{loading ? 'Carregando…' : `${visibleScenarios.length} cenário(s) organizado(s) por folder.`}</p></div></div><div className="scenario-list-content">{!loading && visibleScenarios.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum cenário corresponde ao filtro atual.' : 'Ainda não há cenários. Use “Importar do Zephyr” se quiser criar um a partir de um CSV.'}</p>}{visibleScenarios.map((scenario) => <article className="scenario-summary" key={scenario.id}><strong>{scenario.name}</strong><span>{scenario.test_case_count} caso(s) · {scenario.zephyr_folder}</span><small>Revisor: {scenario.reviewer_email}<br />Supervisor: {scenario.supervisor_email}</small></article>)}</div></section>
     <ConfirmationModal isOpen={Boolean(caseToDelete)} title="Excluir caso de teste?" description={caseToDelete ? `Você removerá ${caseToDelete.code} — ${caseToDelete.title}. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir caso" tone="danger" onCancel={() => setCaseToDelete(null)} onConfirm={() => { if (caseToDelete) void remove(caseToDelete) }} />
     <Toast message={message} onDismiss={() => setMessage('')} />
   </main></div>
@@ -371,8 +394,8 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
   for (const audit of audits) if (!latestAuditByCase.has(audit.test_case_id)) latestAuditByCase.set(audit.test_case_id, audit)
 
   return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
-    <header className="topbar"><div><p className="eyebrow">AUDITORIA ASSISTIDA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Cada caso possui um estado atual: pendente, aguardando revisão ou concluído.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
-    <section className="panel audit-table-panel"><div className="panel-header"><div><h2>Fila de auditorias</h2><p>Execute a auditoria uma vez; depois revise as sugestões no mesmo fluxo.</p></div></div>
+    <header className="topbar"><div><p className="eyebrow">AUDITORIA ASSISTIDA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Execute o caso, revise as sugestões e confirme o resultado final em uma única fila.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
+    <section className="panel audit-table-panel"><div className="panel-header"><div><h2>Fila de auditorias</h2><p>Use a ação indicada em cada linha para avançar o caso para a próxima etapa.</p></div></div>
       <div className="table-wrap"><table className="audit-table"><thead><tr><th>Caso de teste</th><th>Cenário</th><th>Status</th><th>Resultado</th><th>Ação</th></tr></thead><tbody>
         {loading ? <tr><td colSpan={5}><p className="empty-state">Carregando casos e auditorias…</p></td></tr> : visibleCases.length === 0 ? <tr><td colSpan={5}><p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Cadastre ou importe um caso de teste para iniciar.'}</p></td></tr> : visibleCases.map((testCase) => {
           const audit = latestAuditByCase.get(testCase.id)
@@ -381,7 +404,7 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
           const completed = audit?.status === 'COMPLETED'
           const statusLabel = !workflowReady ? 'Configurar papéis' : !audit ? 'Pendente' : waitingReview ? 'Aguardando revisão' : 'Concluída'
           const statusTone = !workflowReady ? 'danger' : !audit ? 'warning' : waitingReview ? 'info' : 'success'
-          return <tr key={testCase.id}><td><span className="case-code">{testCase.code}</span><strong>{testCase.title}</strong></td><td>{testCase.scenario_name || 'Geral'}</td><td><span className={`status ${statusTone}`}>{statusLabel}</span></td><td>{completed ? <strong>{audit.adherence_percentage ?? 0}% · {audit.nonconformity_count} NC(s)</strong> : '—'}</td><td>{!workflowReady ? <button className="secondary-button table-action" type="button" onClick={onOpenCases}>Definir papéis</button> : !audit ? <button className="primary-button table-action" disabled={runningId === testCase.id} type="button" onClick={() => void runAudit(testCase)}>{runningId === testCase.id ? 'Executando…' : 'Executar auditoria'}</button> : waitingReview && audit.can_review ? <button className="primary-button table-action" type="button" onClick={() => openReview(audit)}>Revisar auditoria</button> : waitingReview ? <button className="secondary-button table-action" disabled type="button">Aguardando revisor</button> : <button className="secondary-button table-action" type="button" onClick={() => openReview(audit)}>Ver resultado</button>}</td></tr>
+          return <tr key={testCase.id}><td><span className="case-code">{testCase.code}</span><strong>{testCase.title}</strong></td><td>{testCase.scenario_name || 'Geral'}</td><td><span className={`status ${statusTone}`}>{statusLabel}</span></td><td>{completed ? <strong>{audit.adherence_percentage ?? 0}% · {audit.nonconformity_count} NC(s)</strong> : '—'}</td><td>{!workflowReady ? <button className="secondary-button table-action" type="button" onClick={onOpenCases}>Abrir caso e definir papéis</button> : !audit ? <button className="primary-button table-action" disabled={runningId === testCase.id} type="button" onClick={() => void runAudit(testCase)}>{runningId === testCase.id ? 'Executando…' : 'Executar auditoria'}</button> : waitingReview && audit.can_review ? <button className="primary-button table-action" type="button" onClick={() => openReview(audit)}>Revisar auditoria</button> : waitingReview ? <button className="secondary-button table-action" disabled type="button">Aguardando revisor</button> : <button className="secondary-button table-action" type="button" onClick={() => openReview(audit)}>Ver resultado</button>}</td></tr>
         })}
       </tbody></table></div><ApiState status={apiStatus} />
     </section>
@@ -468,7 +491,7 @@ function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, o
   return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} /><main>
     <header className="topbar"><div><p className="eyebrow">CICLO DE VIDA E ESCALONAMENTO</p><h1>Não conformidades</h1><p className="subtitle">Acompanhe cada NC desde a geração, passando por correção ou contestação, até a decisão final.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
     <section className="nonconformity-list">
-      {!loading && visibleNonconformities.length === 0 && <section className="panel"><p className="empty-state">{selectedScenarioId ? 'Nenhuma não conformidade pertence ao cenário selecionado.' : 'Nenhuma não conformidade atribuída à sua conta.'}</p></section>}
+      {!loading && visibleNonconformities.length === 0 && <section className="panel empty-state-panel"><div><h2>{selectedScenarioId ? 'Nenhuma NC neste cenário' : 'Nenhuma não conformidade atribuída'}</h2><p className="empty-state">{selectedScenarioId ? 'Altere ou limpe o filtro para consultar os demais cenários.' : 'Quando uma auditoria confirmar um desvio, a não conformidade aparecerá aqui.'}</p></div><button className="secondary-button" type="button" onClick={selectedScenarioId ? () => onScenarioChange('') : onOpenAudits}>{selectedScenarioId ? 'Limpar filtro' : 'Abrir auditorias'}</button></section>}
       {visibleNonconformities.map((nonconformity) => <article className="panel nonconformity-card" key={nonconformity.id}>
         <div className="nc-header"><div><span className="case-code">{nonconformity.code} · {nonconformity.test_case_code}</span><h2>{nonconformity.test_case_title}</h2><p>{nonconformity.description}</p></div><div className="nc-badges"><span className={`priority ${severityTone[nonconformity.severity]}`}>Prioridade {severityLabel[nonconformity.severity]}</span><span className={`status ${statusTone[nonconformity.status]}`}>{statusLabel[nonconformity.status]}</span></div></div>
         <p className="nc-meta">Responsável: {nonconformity.assignee_email} · Supervisor: {nonconformity.supervisor_email || 'não definido'}</p>
@@ -541,20 +564,21 @@ function Dashboard({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
       description: `${nonconformity.test_case_code} · ${nonconformity.test_case_title}`,
       meta: dueLabel(nonconformity.status === 'WAITING_VALIDATION' ? nonconformity.review_due_at : nonconformity.status === 'ESCALATED' ? nonconformity.supervisor_decision_due_at : nonconformity.resolution_due_at),
       tone: nonconformity.status === 'WAITING_VALIDATION' ? 'violet' : 'red',
+      target: 'nonconformities' as const,
     })),
-    ...(casesWithoutAudit ? [{ id: 'cases-without-audit', title: 'Casos sem auditoria', description: 'Aguardam a primeira verificação.', meta: `${casesWithoutAudit} caso${casesWithoutAudit === 1 ? '' : 's'}`, tone: 'blue' }] : []),
+    ...(casesWithoutAudit ? [{ id: 'cases-without-audit', title: 'Casos sem auditoria', description: 'Aguardam a primeira verificação.', meta: `${casesWithoutAudit} caso${casesWithoutAudit === 1 ? '' : 's'}`, tone: 'blue', target: 'audits' as const }] : []),
   ].slice(0, 3)
 
   return <div className="app-shell"><Sidebar active="dashboard" user={user} onDashboard={() => undefined} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main id="dashboard">
-    <header className="topbar"><div><p className="eyebrow">PROJETO CHECKOUT</p><h1>Visão geral da qualidade</h1><p className="subtitle">Acompanhe auditorias, aderência e correções dos casos de teste.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /><button className="primary-button" type="button" onClick={onOpenAudits}><span aria-hidden="true">＋</span> Nova auditoria</button></div></header>
+    <header className="topbar"><div><p className="eyebrow">PROJETO CHECKOUT</p><h1>Visão geral da qualidade</h1><p className="subtitle">Acompanhe auditorias, aderência e correções dos casos de teste.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /><button className="primary-button" type="button" onClick={onOpenAudits}>Abrir fila de auditorias <span aria-hidden="true">→</span></button></div></header>
     <section className="metrics" aria-label="Indicadores">
 <article className="metric-card"><span className="metric-icon blue">≡</span><div><span>Casos de teste</span><strong>{loading ? '—' : scopedCases.length}</strong></div><small>{loading ? 'Carregando…' : scopedCases.length ? `${scopedCases.length} caso${scopedCases.length === 1 ? '' : 's'} cadastrado${scopedCases.length === 1 ? '' : 's'}` : 'Nenhum caso cadastrado'}</small></article>
 <article className="metric-card"><span className="metric-icon violet">✓</span><div><span>Auditorias realizadas</span><strong>{loading ? '—' : scopedAudits.length}</strong></div><small>{loading ? 'Carregando…' : scopedAudits.length ? `${scopedAudits.length} registro${scopedAudits.length === 1 ? '' : 's'} concluído${scopedAudits.length === 1 ? '' : 's'}` : 'Nenhuma auditoria realizada'}</small></article>
       <article className="metric-card"><span className="metric-icon red">!</span><div><span>NCs abertas</span><strong>{loading ? '—' : openNonconformities.length}</strong></div><small>{loading ? 'Carregando…' : openNonconformities.length ? `${openNonconformities.length} requer${openNonconformities.length === 1 ? '' : 'em'} ação` : 'Nenhuma pendência aberta'}</small></article>
       <article className="metric-card"><span className="metric-icon green">↗</span><div><span>Aderência média</span><strong>{loading ? '—' : averageAdherence === null ? '—' : `${averageAdherence}%`}</strong></div><small className="positive">{loading ? 'Carregando…' : averageAdherence === null ? 'Sem auditorias concluídas' : 'Média das auditorias realizadas'}</small></article>
     </section>
-    <section className="content-grid"><article className="panel cases-panel" id="test-cases"><div className="panel-header"><div><h2>Auditorias recentes</h2><p>Últimos casos de teste verificados pela equipe.</p></div><button className="text-button" type="button" onClick={onOpenCases}>Ver todos →</button></div><div className="table-wrap"><table><thead><tr><th>Caso de teste</th><th>Auditor</th><th>Aderência</th><th>Estado</th></tr></thead><tbody>{loading ? <tr><td colSpan={4}><p className="empty-state">Carregando auditorias…</p></td></tr> : recentAudits.length === 0 ? <tr><td colSpan={4}><p className="empty-state">Nenhuma auditoria realizada ainda.</p></td></tr> : recentAudits.map((audit) => { const nonconformity = latestNonconformityByCase.get(audit.test_case_code); const tone = nonconformity ? statusTone[nonconformity.status] : audit.nonconformity_count ? 'danger' : 'success'; const label = nonconformity ? statusLabel[nonconformity.status] : audit.nonconformity_count ? 'Não conforme' : 'Conforme'; return <tr key={audit.id}><td><span className="case-code">{audit.test_case_code}</span><strong>{audit.test_case_title}</strong></td><td>{audit.auditor_name}</td><td><div className="progress-row"><span className="progress-track"><span style={{ width: `${audit.adherence_percentage ?? 0}%` }} /></span><strong>{audit.adherence_percentage ?? 0}%</strong></div></td><td><span className={`status ${tone}`}>{label}</span></td></tr> })}</tbody></table></div></article>
-      <aside className="panel next-panel"><div className="panel-header"><div><h2>Próximas ações</h2><p>Itens que precisam de atenção.</p></div></div><ul className="action-list">{loading ? <li><div><strong>Carregando ações…</strong><span>Consultando os dados da equipe.</span></div></li> : actions.length === 0 ? <li><div><strong>Nenhuma ação pendente</strong><span>Não há NCs abertas ou casos aguardando auditoria.</span></div></li> : actions.map((action) => <li key={action.id}><span className={`action-dot ${action.tone}`} /><div><strong>{action.title}</strong><span>{action.description}</span></div><b>{action.meta}</b></li>)}</ul><ApiState status={apiStatus} /></aside>
+    <section className="content-grid"><article className="panel cases-panel" id="test-cases"><div className="panel-header"><div><h2>Auditorias recentes</h2><p>Últimos casos de teste verificados pela equipe.</p></div><button className="text-button" type="button" onClick={onOpenAudits}>Ver fila →</button></div><div className="table-wrap"><table><thead><tr><th>Caso de teste</th><th>Auditor</th><th>Aderência</th><th>Estado</th></tr></thead><tbody>{loading ? <tr><td colSpan={4}><p className="empty-state">Carregando auditorias…</p></td></tr> : recentAudits.length === 0 ? <tr><td colSpan={4}><p className="empty-state">Nenhuma auditoria realizada ainda.</p></td></tr> : recentAudits.map((audit) => { const nonconformity = latestNonconformityByCase.get(audit.test_case_code); const tone = nonconformity ? statusTone[nonconformity.status] : audit.nonconformity_count ? 'danger' : 'success'; const label = nonconformity ? statusLabel[nonconformity.status] : audit.nonconformity_count ? 'Não conforme' : 'Conforme'; return <tr key={audit.id}><td><span className="case-code">{audit.test_case_code}</span><strong>{audit.test_case_title}</strong></td><td>{audit.auditor_name}</td><td><div className="progress-row"><span className="progress-track"><span style={{ width: `${audit.adherence_percentage ?? 0}%` }} /></span><strong>{audit.adherence_percentage ?? 0}%</strong></div></td><td><span className={`status ${tone}`}>{label}</span></td></tr> })}</tbody></table></div></article>
+      <aside className="panel next-panel"><div className="panel-header"><div><h2>Próximas ações</h2><p>Itens que precisam de atenção.</p></div></div><ul className="action-list">{loading ? <li><div><strong>Carregando ações…</strong><span>Consultando os dados da equipe.</span></div></li> : actions.length === 0 ? <li><div><strong>Nenhuma ação pendente</strong><span>Não há NCs abertas ou casos aguardando auditoria.</span></div></li> : actions.map((action) => <li key={action.id}><span className={`action-dot ${action.tone}`} /><div><strong>{action.title}</strong><span>{action.description}</span></div><b>{action.meta}</b><button className="action-open-button" type="button" onClick={action.target === 'audits' ? onOpenAudits : onOpenNonconformities}>Abrir <span aria-hidden="true">→</span></button></li>)}</ul><ApiState status={apiStatus} /></aside>
     </section>
   </main></div>
 }
