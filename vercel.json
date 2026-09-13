@@ -7,13 +7,19 @@
     }
   ],
   "services": {
-    "frontend": {
-      "entrypoint": "frontend",
-      "routePrefix": "/"
-    },
     "backend": {
-      "entrypoint": "backend/main.py",
-      "routePrefix": "/api"
+      "root": "backend",
+      "entrypoint": "main.py",
+      "framework": "fastapi"
     }
-  }
+  },
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": {
+        "service": "backend",
+        "path": "/:path*"
+      }
+    }
+  ]
 }
