@@ -6,7 +6,7 @@
       "schedule": "0 8 * * *"
     }
   ],
-  "experimentalServices": {
+  "services": {
     "frontend": {
       "entrypoint": "frontend",
       "routePrefix": "/"
