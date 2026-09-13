@@ -12,6 +12,8 @@ type TestCaseData = {
 }
 type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'author_name' | 'scenario_name'>
 type ScenarioData = { id: string; name: string; zephyr_folder: string; reviewer_email: string; supervisor_email: string; test_case_count: number; created_at: string }
+type ZephyrOwnerRequest = { identifier: string; test_cases: string[] }
+type ZephyrImportResult = { imported_cases?: number; scenarios?: ScenarioData[]; detail?: string | { code?: string; message?: string; owners?: ZephyrOwnerRequest[] } }
 type AuditItemData = { checklist_code: string; checklist_label: string; result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; suggested_result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; final_result: 'CONFORMING' | 'NONCONFORMING' | 'NOT_APPLICABLE' | null; note: string | null }
 type AuditData = {
   id: string; test_case_id: string; test_case_code: string; test_case_title: string; scenario_id: string | null; scenario_name: string | null; auditor_name: string
@@ -188,6 +190,8 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   const [zephyrFile, setZephyrFile] = useState<File | null>(null)
   const [reviewerEmail, setReviewerEmail] = useState(user.email)
   const [supervisorEmail, setSupervisorEmail] = useState('')
+  const [ownersToMap, setOwnersToMap] = useState<ZephyrOwnerRequest[]>([])
+  const [ownerEmailMap, setOwnerEmailMap] = useState<Record<string, string>>({})
   const [importing, setImporting] = useState(false)
   const [showCaseEditor, setShowCaseEditor] = useState(false)
   const [showImportPanel, setShowImportPanel] = useState(false)
@@ -210,7 +214,11 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   useEffect(() => { void loadCases() }, [])
   const importZephyr = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!zephyrFile) { setMessage('Selecione o CSV exportado pelo Zephyr.'); return }
+    if (!zephyrFile) { setMessage('Selecione um arquivo .xlsx, .xml ou .csv exportado pelo Zephyr.'); return }
+    if (ownersToMap.some(({ identifier }) => !ownerEmailMap[identifier]?.trim())) {
+      setMessage('Informe o e-mail de cada responsável identificado pelo Zephyr.')
+      return
+    }
     setImporting(true)
     setMessage('')
     try {
@@ -218,10 +226,20 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
       payload.append('file', zephyrFile)
       payload.append('reviewer_email', reviewerEmail)
       payload.append('supervisor_email', supervisorEmail)
+      payload.append('owner_email_map', JSON.stringify(ownerEmailMap))
       const response = await fetch('/api/scenarios/import-zephyr', { method: 'POST', credentials: 'include', body: payload })
-      const result = await response.json().catch(() => ({})) as { imported_cases?: number; scenarios?: ScenarioData[]; detail?: string }
-      if (!response.ok) throw new Error(result.detail || 'Não foi possível importar o arquivo.')
+      const result = await response.json().catch(() => ({})) as ZephyrImportResult
+      if (!response.ok) {
+        if (typeof result.detail === 'object' && result.detail.code === 'OWNER_EMAIL_REQUIRED') {
+          setOwnersToMap(result.detail.owners || [])
+          setMessage(result.detail.message || 'Informe o e-mail dos responsáveis antes de continuar.')
+          return
+        }
+        throw new Error(typeof result.detail === 'string' ? result.detail : 'Não foi possível importar o arquivo.')
+      }
       setZephyrFile(null)
+      setOwnersToMap([])
+      setOwnerEmailMap({})
       await loadCases()
       await onScenariosChanged()
       setShowImportPanel(false)
@@ -308,7 +326,19 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
       <div className="case-list-content">{!loading && visibleCases.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Ainda não há casos de teste. Crie um caso geral ou importe um CSV do Zephyr.'}</p>}{visibleCases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Cenário: {testCase.scenario_name || 'Geral'}</p><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p><p>Revisor: {testCase.reviewer_email}</p><p>Supervisor: {testCase.supervisor_email || 'não definido'}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
-    {showImportPanel && <form className="panel zephyr-import-panel" id="zephyr-import-panel" ref={importPanelRef} onSubmit={importZephyr}><div className="panel-header"><div><p className="eyebrow">IMPORTAÇÃO OPCIONAL</p><h2>Importar exportação do Zephyr</h2><p>Envie o CSV somente quando quiser criar cenários pelos folders de origem e agrupar os casos automaticamente.</p></div></div><div className="form-fields compact-fields"><label>Arquivo CSV do Zephyr *<input type="file" accept=".csv,text/csv" required onChange={(event) => setZephyrFile(event.target.files?.[0] || null)} /></label><label>Revisor do cenário *<input type="email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} required /></label><label>Supervisor para escalonamento *<input type="email" value={supervisorEmail} onChange={(event) => setSupervisorEmail(event.target.value)} placeholder="supervisor@exemplo.com" required /></label></div><div className="form-actions"><button className="text-button" type="button" onClick={() => setShowImportPanel(false)}>Cancelar importação</button><button className="primary-button" disabled={importing} type="submit">{importing ? 'Importando…' : 'Importar e criar cenários'}</button></div></form>}
+    {showImportPanel && <form className="panel zephyr-import-panel" id="zephyr-import-panel" ref={importPanelRef} onSubmit={importZephyr}>
+      <div className="panel-header"><div><p className="eyebrow">IMPORTAÇÃO DO ZEPHYR</p><h2>Importar casos e criar cenários</h2><p>Use o export original do Zephyr em Excel, XML ou CSV. Os folders agrupam os casos; revisor e supervisor são definidos para cada cenário criado.</p></div></div>
+      <div className="form-fields compact-fields">
+        <label>Arquivo do Zephyr *<span className="field-hint">Formatos aceitos: .xlsx, .xml e .csv.</span><input type="file" accept=".xlsx,.xml,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml,text/csv" required onChange={(event) => { setZephyrFile(event.target.files?.[0] || null); setOwnersToMap([]); setOwnerEmailMap({}) }} /></label>
+        <label>Revisor do cenário *<span className="field-hint">Decide o resultado final e valida as correções.</span><input type="email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} required /></label>
+        <label>Supervisor para escalonamento *<span className="field-hint">Dá a palavra final em contestações e atrasos.</span><input type="email" value={supervisorEmail} onChange={(event) => setSupervisorEmail(event.target.value)} placeholder="supervisor@exemplo.com" required /></label>
+      </div>
+      {ownersToMap.length > 0 && <section className="owner-mapping" aria-labelledby="owner-mapping-title">
+        <div><p className="eyebrow">AÇÃO NECESSÁRIA</p><h3 id="owner-mapping-title">Associar responsáveis do Zephyr</h3><p>O campo <strong>Owner</strong> do arquivo contém um identificador interno, não um e-mail. Informe quem receberá as não conformidades desses casos.</p></div>
+        <div className="owner-mapping-fields">{ownersToMap.map((owner) => <label key={owner.identifier}>Owner do Zephyr: <code>{owner.identifier}</code><span className="field-hint">Casos: {owner.test_cases.join(', ')}</span><input type="email" value={ownerEmailMap[owner.identifier] || ''} onChange={(event) => setOwnerEmailMap((current) => ({ ...current, [owner.identifier]: event.target.value }))} placeholder="responsavel@exemplo.com" required /></label>)}</div>
+      </section>}
+      <div className="form-actions"><button className="text-button" type="button" onClick={() => { setShowImportPanel(false); setOwnersToMap([]); setOwnerEmailMap({}) }}>Cancelar importação</button><button className="primary-button" disabled={importing} type="submit">{importing ? 'Importando…' : ownersToMap.length > 0 ? 'Confirmar responsáveis e importar' : 'Ler arquivo e importar'}</button></div>
+    </form>}
     <section className="panel scenario-list"><div className="panel-header"><div><h2>Cenários importados</h2><p>{loading ? 'Carregando…' : `${visibleScenarios.length} cenário(s) organizado(s) por folder.`}</p></div></div><div className="scenario-list-content">{!loading && visibleScenarios.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum cenário corresponde ao filtro atual.' : 'Ainda não há cenários. Use “Importar do Zephyr” se quiser criar um a partir de um CSV.'}</p>}{visibleScenarios.map((scenario) => <article className="scenario-summary" key={scenario.id}><strong>{scenario.name}</strong><span>{scenario.test_case_count} caso(s) · {scenario.zephyr_folder}</span><small>Revisor: {scenario.reviewer_email}<br />Supervisor: {scenario.supervisor_email}</small></article>)}</div></section>
     <ConfirmationModal isOpen={Boolean(caseToDelete)} title="Excluir caso de teste?" description={caseToDelete ? `Você removerá ${caseToDelete.code} — ${caseToDelete.title}. Esta ação não pode ser desfeita.` : ''} confirmLabel="Excluir caso" tone="danger" onCancel={() => setCaseToDelete(null)} onConfirm={() => { if (caseToDelete) void remove(caseToDelete) }} />
     <Toast message={message} onDismiss={() => setMessage('')} />

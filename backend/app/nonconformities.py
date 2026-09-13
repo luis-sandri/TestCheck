@@ -202,6 +202,11 @@ def escalate_to_supervisor(
     )
 
 
+def as_utc(value: datetime) -> datetime:
+    """Compatibiliza datetimes vindos de bancos que não preservam o fuso."""
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 def escalate_overdue_nonconformities(db: Session) -> None:
     """Aplica o escalonamento pendente quando a API é consultada.
 
@@ -223,14 +228,14 @@ def escalate_overdue_nonconformities(db: Session) -> None:
         else:
             active_deadline = None
             overdue_message = ""
-        if active_deadline and active_deadline <= now:
+        if active_deadline and as_utc(active_deadline) <= now:
             escalate_to_supervisor(db, nonconformity, now, "ESCALATED", overdue_message)
             changed = True
             continue
         if (
             nonconformity.status == NonconformityStatus.ESCALATED
             and nonconformity.supervisor_decision_due_at
-            and nonconformity.supervisor_decision_due_at <= now
+            and as_utc(nonconformity.supervisor_decision_due_at) <= now
             and not any(event.event_type == "SUPERVISOR_DEADLINE_OVERDUE" for event in nonconformity.history)
         ):
             record_history(

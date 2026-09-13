@@ -41,7 +41,7 @@ def authenticate(client: TestClient) -> None:
 
 def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     authenticate(client)
-    created = client.post("/test-cases", json={"title": "Login válido", "steps": "1. Informar credenciais"})
+    created = client.post("/test-cases", json={"title": "Login válido", "steps": "1. Informar credenciais", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
     assert created.status_code == 201
     assert created.json()["code"] == "TC-001"
     assert created.json()["responsible_email"] == "luis@example.com"
@@ -49,7 +49,7 @@ def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     case_id = created.json()["id"]
     updated = client.put(
         f"/test-cases/{case_id}",
-        json={"title": "Login válido", "steps": "1. Informar credenciais", "expected_result": "Acesso liberado", "responsible_email": "andre@example.com"},
+        json={"title": "Login válido", "steps": "1. Informar credenciais", "expected_result": "Acesso liberado", "responsible_email": "andre@example.com", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"},
     )
     assert updated.status_code == 200
     assert updated.json()["expected_result"] == "Acesso liberado"
@@ -64,17 +64,34 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     created = client.post(
         "/test-cases",
         json={
-            "title": "Login válido",
-            "steps": "1. Informar credenciais",
-            "expected_result": "Acesso liberado",
+                "title": "Login válido",
+                "steps": "1. Informar credenciais",
+                "expected_result": "Acesso liberado",
+                "reviewer_email": "luis@example.com",
+                "supervisor_email": "supervisor@example.com",
         },
     )
     audit = client.post("/audits", json={"test_case_id": created.json()["id"]})
 
     assert audit.status_code == 201
-    assert audit.json()["status"] == "COMPLETED"
-    assert audit.json()["adherence_percentage"] == 33
-    assert audit.json()["nonconformity_count"] == 4
+    assert audit.json()["status"] == "DRAFT"
+    review = client.post(
+        f"/audits/{audit.json()['id']}/review",
+        json={
+            "items": [
+                {
+                    "checklist_code": item["checklist_code"],
+                    "result": item["suggested_result"],
+                    "priority": "MEDIUM" if item["suggested_result"] == "NONCONFORMING" else None,
+                }
+                for item in audit.json()["items"]
+            ]
+        },
+    )
+    assert review.status_code == 200
+    assert review.json()["status"] == "COMPLETED"
+    assert review.json()["adherence_percentage"] == 33
+    assert review.json()["nonconformity_count"] == 4
     assert len(client.get("/audits").json()) == 1
 
     nonconformity = client.get("/nonconformities").json()[0]
