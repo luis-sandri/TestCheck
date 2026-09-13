@@ -1793,6 +1793,45 @@ td strong {
 .audit-modal-item span { color: #637667; font-size: 13px; }
 .audit-modal-item small { color: #708075; font-size: 12px; line-height: 1.45; }
 
+.audit-field-value {
+  display: grid;
+  gap: 4px;
+  margin-top: 5px;
+  padding: 10px 11px;
+  border: 1px solid #dfe9e1;
+  border-left: 3px solid #257744;
+  border-radius: 8px;
+  background: #f7faf7;
+}
+
+.audit-field-value > span {
+  color: #48624f;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.audit-field-value p {
+  margin: 0;
+  color: #273d2c;
+  font-size: 13px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.audit-field-value.is-empty {
+  border-color: #f0c0c6;
+  border-left-color: var(--red);
+  background: #fff7f8;
+}
+
+.audit-field-value.is-empty p {
+  color: #84263a;
+  font-style: italic;
+}
+
 .audit-modal-controls {
   display: grid;
   gap: 8px;

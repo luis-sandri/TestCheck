@@ -75,6 +75,10 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
 
     assert audit.status_code == 201
     assert audit.json()["status"] == "DRAFT"
+    items_by_code = {item["checklist_code"]: item for item in audit.json()["items"]}
+    assert items_by_code["STEPS"]["field_value"] == "1. Informar credenciais"
+    assert items_by_code["EXPECTED_RESULT"]["field_value"] == "Acesso liberado"
+    assert items_by_code["OBJECTIVE"]["field_value"] is None
     review = client.post(
         f"/audits/{audit.json()['id']}/review",
         json={

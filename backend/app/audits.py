@@ -38,6 +38,7 @@ CHECKLIST = (
     ("EXPECTED_RESULT", "Resultado esperado", "expected_result"),
     ("APPROVAL_CRITERIA", "Critério de aprovação", "approval_criteria"),
 )
+CHECKLIST_FIELD_BY_CODE = {code: field for code, _label, field in CHECKLIST}
 
 def audit_query():
     return select(Audit).options(
@@ -84,6 +85,10 @@ def next_nc_code(db: Session) -> str:
 
 
 def serialize_audit(audit: Audit, user: User) -> AuditOutput:
+    def field_value_for(checklist_code: str) -> str | None:
+        value = getattr(audit.test_case, CHECKLIST_FIELD_BY_CODE[checklist_code], None)
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
     return AuditOutput(
         id=audit.id,
         test_case_id=audit.test_case_id,
@@ -99,6 +104,7 @@ def serialize_audit(audit: Audit, user: User) -> AuditOutput:
             AuditItemOutput(
                 checklist_code=item.checklist_code,
                 checklist_label=item.checklist_label,
+                field_value=field_value_for(item.checklist_code),
                 result=item.final_result or item.suggested_result or item.result,
                 suggested_result=item.suggested_result or item.result,
                 final_result=item.final_result,

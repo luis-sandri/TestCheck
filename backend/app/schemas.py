@@ -116,6 +116,7 @@ class AuditStartInput(BaseModel):
 class AuditItemOutput(BaseModel):
     checklist_code: str
     checklist_label: str
+    field_value: str | None
     result: ChecklistResult | None
     suggested_result: ChecklistResult | None
     final_result: ChecklistResult | None
