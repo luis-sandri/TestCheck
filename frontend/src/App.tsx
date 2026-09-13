@@ -76,6 +76,22 @@ function ConfirmationModal({ isOpen, title, description, confirmLabel, tone = 'p
   </div>
 }
 
+type ToastTone = 'success' | 'info' | 'warning' | 'error'
+
+function getToastFeedback(message: string): { tone: ToastTone; label: string; icon: string } {
+  const normalized = message.toLocaleLowerCase('pt-BR')
+  const isError = /não foi possível|recusou|falh|erro|inválid|obrigat|diferente|somente|precisa|não pode|não possui|não encontrado|nenhum caso|descreva|selecione|defina|registre|informe/.test(normalized)
+  if (isError) return { tone: 'error', label: 'Não foi possível concluir', icon: '!' }
+
+  const isWarning = /devolvid[ao]|ação necessária|prazo|confirmada\(s\)/.test(normalized) && !/0 nc\(s\) confirmada\(s\)/.test(normalized)
+  if (isWarning) return { tone: 'warning', label: 'Ação necessária', icon: '!' }
+
+  const isInfo = /sugestões automáticas|enviad[ao].*(validação|análise)|aguardando|identificadores de owner|revisão finalizada/.test(normalized)
+  if (isInfo) return { tone: 'info', label: 'Próxima etapa', icon: 'i' }
+
+  return { tone: 'success', label: 'Concluído', icon: '✓' }
+}
+
 function Toast({ message, onDismiss }: { message: string; onDismiss: () => void }) {
   const [isLeaving, setIsLeaving] = useState(false)
   useEffect(() => {
@@ -86,12 +102,9 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
   }, [message])
 
   if (!message) return null
-  const isError = /não foi possível|recusou|descreva|selecione|informe|registre|somente|precisa|obrigat|inválid|diferente|falh|erro/i.test(message)
-  const isInfo = !isError && /sugestões automáticas|aguardando|configurar|consulte/i.test(message)
-  const tone = isError ? 'error' : isInfo ? 'info' : 'success'
-  const label = isError ? 'Não foi possível concluir' : isInfo ? 'Atenção' : 'Concluído'
-  const icon = isError ? '!' : isInfo ? 'i' : '✓'
-  return <div className={`toast-notification ${tone} ${isLeaving ? 'is-leaving' : ''}`} role={isError ? 'alert' : 'status'} aria-live={isError ? 'assertive' : 'polite'} onAnimationEnd={() => { if (isLeaving) onDismiss() }}>
+  const { tone, label, icon } = getToastFeedback(message)
+  const needsImmediateAttention = tone === 'error' || tone === 'warning'
+  return <div className={`toast-notification ${tone} ${isLeaving ? 'is-leaving' : ''}`} role={needsImmediateAttention ? 'alert' : 'status'} aria-live={needsImmediateAttention ? 'assertive' : 'polite'} aria-atomic="true" onAnimationEnd={() => { if (isLeaving) onDismiss() }}>
     <span className="toast-icon" aria-hidden="true">{icon}</span>
     <div><strong>{label}</strong><p>{message}</p></div>
     <button type="button" aria-label="Fechar aviso" onClick={onDismiss}>×</button>
