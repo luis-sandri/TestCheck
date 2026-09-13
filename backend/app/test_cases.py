@@ -17,6 +17,7 @@ def serialize_case(test_case: TestCase) -> TestCaseOutput:
     return TestCaseOutput(
         id=test_case.id,
         code=test_case.code,
+        zephyr_key=test_case.zephyr_key,
         title=test_case.title,
         description=test_case.description,
         preconditions=test_case.preconditions,

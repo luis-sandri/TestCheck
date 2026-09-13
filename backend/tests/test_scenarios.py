@@ -77,6 +77,7 @@ def test_xml_export_requests_owner_mapping_then_imports(client: TestClient) -> N
     assert imported.json()["imported_cases"] == 1
     case = client.get("/test-cases").json()[0]
     assert case["title"] == "Login valido"
+    assert case["zephyr_key"] == "SCRUM-T1"
     assert case["responsible_email"] == "andre@example.com"
     assert case["description"] == "Validar acesso"
     assert case["steps"] == "Informar credenciais"

@@ -338,6 +338,7 @@ async def import_zephyr_file(
             imported_scenarios[folder] = scenario
         test_case = TestCase(
             code=next_code(db),
+            zephyr_key=str(case["source_key"]) or None,
             title=str(case["title"]),
             scenario_id=scenario.id,
             author_id=current_user.id,

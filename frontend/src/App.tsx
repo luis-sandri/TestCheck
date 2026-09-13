@@ -7,10 +7,10 @@ type AuthMode = 'login' | 'register'
 type PageName = 'dashboard' | 'test-cases' | 'audits' | 'nonconformities'
 type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN' }
 type TestCaseData = {
-  id: string; code: string; title: string; description: string; preconditions: string; steps: string
+  id: string; code: string; zephyr_key: string | null; title: string; description: string; preconditions: string; steps: string
   test_data: string; expected_result: string; approval_criteria: string; author_name: string; responsible_email: string; reviewer_email: string; supervisor_email: string; scenario_id: string | null; scenario_name: string | null
 }
-type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'author_name' | 'scenario_name'>
+type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'zephyr_key' | 'author_name' | 'scenario_name'>
 type ScenarioData = { id: string; name: string; zephyr_folder: string; reviewer_email: string; supervisor_email: string; test_case_count: number; created_at: string }
 type ZephyrOwnerRequest = { identifier: string; test_cases: string[] }
 type ZephyrImportResult = { imported_cases?: number; scenarios?: ScenarioData[]; detail?: string | { code?: string; message?: string; owners?: ZephyrOwnerRequest[] } }
@@ -272,7 +272,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     window.requestAnimationFrame(() => target.setSelectionRange(position + insertion.length, position + insertion.length))
   }
   const edit = (testCase: TestCaseData) => {
-    const { id, code, author_name, scenario_name, ...values } = testCase
+    const { id, code, zephyr_key, author_name, scenario_name, ...values } = testCase
     setEditingId(id)
     setForm({ ...values, scenario_id: values.scenario_id || '' })
     setShowCaseEditor(true)
@@ -323,7 +323,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
       <div className="form-actions"><button className="text-button" type="button" onClick={closeCaseEditor}>{editingId ? 'Cancelar edição' : 'Cancelar criação'}</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
     </form>}
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${visibleCases.length} caso(s) no filtro atual.`}</p></div></div>
-      <div className="case-list-content">{!loading && visibleCases.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Ainda não há casos de teste. Crie um caso geral ou importe um CSV do Zephyr.'}</p>}{visibleCases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3><p>Cenário: {testCase.scenario_name || 'Geral'}</p><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p><p>Revisor: {testCase.reviewer_email}</p><p>Supervisor: {testCase.supervisor_email || 'não definido'}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
+      <div className="case-list-content">{!loading && visibleCases.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Ainda não há casos de teste. Crie um caso geral ou importe um arquivo do Zephyr.'}</p>}{visibleCases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3>{testCase.zephyr_key && <p>Origem Zephyr: {testCase.zephyr_key}</p>}<p>Cenário: {testCase.scenario_name || 'Geral'}</p><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p><p>Revisor: {testCase.reviewer_email}</p><p>Supervisor: {testCase.supervisor_email || 'não definido'}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
     </section></section>
     {showImportPanel && <form className="panel zephyr-import-panel" id="zephyr-import-panel" ref={importPanelRef} onSubmit={importZephyr}>

@@ -127,6 +127,7 @@ class TestCase(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
     code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    zephyr_key: Mapped[str | None] = mapped_column(String(100))
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str | None] = mapped_column(Text)
     preconditions: Mapped[str | None] = mapped_column(Text)

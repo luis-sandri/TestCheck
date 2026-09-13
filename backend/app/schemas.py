@@ -90,6 +90,7 @@ class TestCaseInput(BaseModel):
 class TestCaseOutput(BaseModel):
     id: str
     code: str
+    zephyr_key: str | None
     title: str
     description: str | None
     preconditions: str | None
