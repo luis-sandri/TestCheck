@@ -54,7 +54,9 @@ def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     assert updated.status_code == 200
     assert updated.json()["expected_result"] == "Acesso liberado"
     assert updated.json()["responsible_email"] == "andre@example.com"
-    assert len(client.get("/test-cases").json()) == 1
+    listed = client.get("/test-cases")
+    assert listed.headers["cache-control"] == "no-store, max-age=0"
+    assert len(listed.json()) == 1
     assert client.delete(f"/test-cases/{case_id}").status_code == 204
     assert client.get("/test-cases").json() == []
 

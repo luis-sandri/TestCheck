@@ -1,4 +1,4 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -27,6 +27,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def disable_api_response_cache(request: Request, call_next):
+    """Impede que telas autenticadas reutilizem estados antigos da API."""
+    response = await call_next(request)
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return response
+
+
 app.include_router(auth_router)
 app.include_router(test_case_router)
 app.include_router(audit_router)

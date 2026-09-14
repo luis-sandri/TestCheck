@@ -30,6 +30,7 @@ type NonconformityData = {
 const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
   title: '', scenario_id: '', responsible_email: responsibleEmail, reviewer_email: responsibleEmail, supervisor_email: '', description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
 })
+const apiReadOptions = { credentials: 'include' as const, cache: 'no-store' as const }
 
 function initials(name: string) {
   return name.split(' ').filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
@@ -241,8 +242,8 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     setLoading(true)
     try {
       const [casesResponse, scenariosResponse] = await Promise.all([
-        fetch('/api/test-cases', { credentials: 'include' }),
-        fetch('/api/scenarios', { credentials: 'include' }),
+        fetch('/api/test-cases', apiReadOptions),
+        fetch('/api/scenarios', apiReadOptions),
       ])
       if (!casesResponse.ok || !scenariosResponse.ok) throw new Error()
       setCases(await casesResponse.json() as TestCaseData[])
@@ -421,7 +422,7 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
   const loadData = async () => {
     setLoading(true)
     try {
-      const [casesResponse, auditsResponse] = await Promise.all([fetch('/api/test-cases', { credentials: 'include' }), fetch('/api/audits', { credentials: 'include' })])
+      const [casesResponse, auditsResponse] = await Promise.all([fetch('/api/test-cases', apiReadOptions), fetch('/api/audits', apiReadOptions)])
       if (!casesResponse.ok || !auditsResponse.ok) throw new Error()
       setCases(await casesResponse.json() as TestCaseData[])
       setAudits(await auditsResponse.json() as AuditData[])
@@ -493,7 +494,7 @@ function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, o
   const loadNonconformities = async () => {
     setLoading(true)
     try {
-      const response = await fetch('/api/nonconformities', { credentials: 'include' })
+      const response = await fetch('/api/nonconformities', apiReadOptions)
       if (!response.ok) throw new Error()
       setNonconformities(await response.json() as NonconformityData[])
     } catch { setMessage('Não foi possível carregar as não conformidades.') } finally { setLoading(false) }
@@ -601,9 +602,9 @@ function Dashboard({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
       setLoading(true)
       try {
         const [casesResponse, auditsResponse, nonconformitiesResponse] = await Promise.all([
-          fetch('/api/test-cases', { credentials: 'include' }),
-          fetch('/api/audits', { credentials: 'include' }),
-          fetch('/api/nonconformities', { credentials: 'include' }),
+          fetch('/api/test-cases', apiReadOptions),
+          fetch('/api/audits', apiReadOptions),
+          fetch('/api/nonconformities', apiReadOptions),
         ])
         if (!casesResponse.ok || !auditsResponse.ok || !nonconformitiesResponse.ok) throw new Error()
         setCases(await casesResponse.json() as TestCaseData[])
@@ -681,10 +682,10 @@ function App() {
   useEffect(() => {
     const loadSession = async () => {
       try {
-        const health = await fetch('/api/health', { credentials: 'include' })
+        const health = await fetch('/api/health', apiReadOptions)
         if (!health.ok) throw new Error('API indisponível')
         setApiStatus('online')
-        const me = await fetch('/api/auth/me', { credentials: 'include' })
+        const me = await fetch('/api/auth/me', apiReadOptions)
         if (me.ok) setUser(await me.json() as CurrentUser)
       } catch { setApiStatus('offline') } finally { setLoadingSession(false) }
     }
@@ -692,7 +693,7 @@ function App() {
   }, [])
   const loadScenarios = async () => {
     try {
-      const response = await fetch('/api/scenarios', { credentials: 'include' })
+      const response = await fetch('/api/scenarios', apiReadOptions)
       if (!response.ok) throw new Error()
       const loadedScenarios = await response.json() as ScenarioData[]
       setScenarios(loadedScenarios)
