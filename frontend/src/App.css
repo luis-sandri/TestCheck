@@ -22,9 +22,12 @@
 }
 
 .app-shell {
+  width: 100%;
+  max-width: 100%;
   min-height: 100vh;
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
+  overflow-x: clip;
   transition: grid-template-columns 180ms ease;
 }
 
@@ -350,6 +353,8 @@ nav {
 
 main {
   min-width: 0;
+  max-width: 100%;
+  overflow-x: clip;
   padding: 38px clamp(24px, 4vw, 58px) 48px;
 }
 
@@ -760,6 +765,7 @@ textarea:focus-visible {
 .danger-solid-button:hover { background: #941c33; }
 
 .table-wrap {
+  max-width: 100%;
   overflow-x: auto;
 }
 
@@ -1682,6 +1688,21 @@ td strong {
   gap: 14px;
   padding: 17px 2px;
   border-top: 1px solid #edf0f5;
+}
+
+.case-summary > div:first-child,
+.audit-case > div:first-child,
+.audit-summary > div:first-child,
+.nc-header > div:first-child {
+  min-width: 0;
+}
+
+.case-summary h3,
+.audit-case h3,
+.audit-summary h3,
+.nc-header h2,
+.audit-field-value p {
+  overflow-wrap: anywhere;
 }
 
 .case-summary h3 {
