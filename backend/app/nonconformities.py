@@ -24,11 +24,13 @@ from .models import (
     NonconformityStatus,
     Notification,
     NotificationType,
+    Organization,
     Scenario,
     TestCase,
     User,
     UserRole,
 )
+from .organizations import get_current_organization
 from .schemas import (
     EvidenceInput,
     EvidenceOutput,
@@ -43,8 +45,8 @@ from .sla import add_business_days, target_for
 router = APIRouter(prefix="/nonconformities", tags=["Não conformidades"])
 settings = get_settings()
 
-def query_nonconformities():
-    return select(Nonconformity).options(
+def query_nonconformities(organization_id: str | None = None):
+    statement = select(Nonconformity).options(
         selectinload(Nonconformity.test_case).selectinload(TestCase.scenario),
         selectinload(Nonconformity.test_case).selectinload(TestCase.author),
         selectinload(Nonconformity.assignee),
@@ -52,6 +54,9 @@ def query_nonconformities():
         selectinload(Nonconformity.history),
         selectinload(Nonconformity.audit_item).selectinload(AuditItem.audit).selectinload(Audit.auditor),
     )
+    if organization_id:
+        statement = statement.where(Nonconformity.test_case.has(TestCase.organization_id == organization_id))
+    return statement
 
 
 def record_history(
@@ -74,8 +79,10 @@ def record_history(
     )
 
 
-def get_nonconformity_or_404(nonconformity_id: str, db: Session) -> Nonconformity:
-    nonconformity = db.scalar(query_nonconformities().where(Nonconformity.id == nonconformity_id))
+def get_nonconformity_or_404(nonconformity_id: str, organization_id: str, db: Session) -> Nonconformity:
+    nonconformity = db.scalar(
+        query_nonconformities(organization_id).where(Nonconformity.id == nonconformity_id)
+    )
     if nonconformity is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Não conformidade não encontrada.")
     return nonconformity
@@ -261,9 +268,10 @@ def escalate_overdue_nonconformities(db: Session) -> None:
 def list_nonconformities(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> list[NonconformityOutput]:
     escalate_overdue_nonconformities(db)
-    statement = query_nonconformities().order_by(Nonconformity.created_at.desc())
+    statement = query_nonconformities(organization.id).order_by(Nonconformity.created_at.desc())
     if current_user.role == UserRole.RESPONSIBLE:
         statement = statement.where(
             or_(
@@ -296,8 +304,9 @@ def retry_notification(
     nonconformity_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> dict[str, bool]:
-    nonconformity = get_nonconformity_or_404(nonconformity_id, db)
+    nonconformity = get_nonconformity_or_404(nonconformity_id, organization.id, db)
     if not (can_submit(nonconformity, current_user) or can_review(nonconformity, current_user) or can_decide_final(nonconformity, current_user)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Você não pode reenviar esta notificação.")
     recipient = (
@@ -328,9 +337,10 @@ def submit_evidence(
     payload: EvidenceInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> NonconformityOutput:
     escalate_overdue_nonconformities(db)
-    nonconformity = get_nonconformity_or_404(nonconformity_id, db)
+    nonconformity = get_nonconformity_or_404(nonconformity_id, organization.id, db)
     if not can_submit(nonconformity, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Esta NC não está atribuída a você ou já foi escalada.")
 
@@ -355,7 +365,7 @@ def submit_evidence(
         )
         db.commit()
         db.expire_all()
-        return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)
+        return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, organization.id, db), current_user)
 
     nonconformity.status = NonconformityStatus.WAITING_VALIDATION
     nonconformity.review_due_at = add_business_days(
@@ -382,7 +392,7 @@ def submit_evidence(
     send_notification_email(notification, notification.message)
     db.commit()
     db.expire_all()
-    return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)
+    return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, organization.id, db), current_user)
 
 
 @router.post("/{nonconformity_id}/review", response_model=NonconformityOutput)
@@ -391,9 +401,10 @@ def review_evidence(
     payload: EvidenceReviewInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> NonconformityOutput:
     escalate_overdue_nonconformities(db)
-    nonconformity = get_nonconformity_or_404(nonconformity_id, db)
+    nonconformity = get_nonconformity_or_404(nonconformity_id, organization.id, db)
     if not can_review(nonconformity, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o revisor definido para o caso pode validar esta evidência.")
     evidence = next((item for item in nonconformity.evidences if item.id == payload.evidence_id), None)
@@ -439,7 +450,7 @@ def review_evidence(
     send_notification_email(notification, notification.message)
     db.commit()
     db.expire_all()
-    return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)
+    return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, organization.id, db), current_user)
 
 
 @router.post("/{nonconformity_id}/supervisor-decision", response_model=NonconformityOutput)
@@ -448,9 +459,10 @@ def supervisor_decision(
     payload: SupervisorDecisionInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> NonconformityOutput:
     escalate_overdue_nonconformities(db)
-    nonconformity = get_nonconformity_or_404(nonconformity_id, db)
+    nonconformity = get_nonconformity_or_404(nonconformity_id, organization.id, db)
     if not can_decide_final(nonconformity, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Somente o supervisor do cenário pode registrar a decisão final.")
     previous_status = nonconformity.status
@@ -482,4 +494,4 @@ def supervisor_decision(
     )
     db.commit()
     db.expire_all()
-    return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, db), current_user)
+    return serialize_nonconformity(get_nonconformity_or_404(nonconformity.id, organization.id, db), current_user)

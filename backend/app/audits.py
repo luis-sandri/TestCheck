@@ -21,9 +21,11 @@ from .models import (
     NonconformitySeverity,
     Notification,
     NotificationType,
+    Organization,
     TestCase,
     User,
 )
+from .organizations import get_current_organization
 from .schemas import AuditItemOutput, AuditOutput, AuditReviewInput, AuditStartInput
 from .sla import add_business_days, target_for
 
@@ -49,19 +51,21 @@ def audit_query():
     )
 
 
-def get_test_case_or_404(case_id: str, db: Session) -> TestCase:
+def get_test_case_or_404(case_id: str, organization_id: str, db: Session) -> TestCase:
     test_case = db.scalar(
         select(TestCase)
         .options(selectinload(TestCase.author), selectinload(TestCase.scenario))
-        .where(TestCase.id == case_id)
+        .where(TestCase.id == case_id, TestCase.organization_id == organization_id)
     )
     if test_case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caso de teste não encontrado.")
     return test_case
 
 
-def get_audit_or_404(audit_id: str, db: Session) -> Audit:
-    audit = db.scalar(audit_query().where(Audit.id == audit_id))
+def get_audit_or_404(audit_id: str, organization_id: str, db: Session) -> Audit:
+    audit = db.scalar(
+        audit_query().where(Audit.id == audit_id, Audit.test_case.has(TestCase.organization_id == organization_id))
+    )
     if audit is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Auditoria não encontrada.")
     return audit
@@ -122,8 +126,13 @@ def serialize_audit(audit: Audit, user: User) -> AuditOutput:
 def list_audits(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> list[AuditOutput]:
-    audits = db.scalars(audit_query().order_by(Audit.created_at.desc())).all()
+    audits = db.scalars(
+        audit_query()
+        .where(Audit.test_case.has(TestCase.organization_id == organization.id))
+        .order_by(Audit.created_at.desc())
+    ).all()
     return [serialize_audit(audit, current_user) for audit in audits]
 
 
@@ -132,8 +141,9 @@ def run_audit(
     payload: AuditStartInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> AuditOutput:
-    test_case = get_test_case_or_404(payload.test_case_id, db)
+    test_case = get_test_case_or_404(payload.test_case_id, organization.id, db)
     pending_audit = db.scalar(
         select(Audit).where(
             Audit.test_case_id == test_case.id,
@@ -166,7 +176,7 @@ def run_audit(
         )
 
     db.commit()
-    return serialize_audit(get_audit_or_404(audit.id, db), current_user)
+    return serialize_audit(get_audit_or_404(audit.id, organization.id, db), current_user)
 
 
 @router.post("/{audit_id}/review", response_model=AuditOutput)
@@ -175,8 +185,9 @@ def review_audit(
     payload: AuditReviewInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> AuditOutput:
-    audit = get_audit_or_404(audit_id, db)
+    audit = get_audit_or_404(audit_id, organization.id, db)
     if audit.status != AuditStatus.DRAFT:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Esta auditoria já foi revisada.")
     if not can_review(audit, current_user):
@@ -250,4 +261,4 @@ def review_audit(
     audit.completed_at = now
     audit.adherence_percentage = round((conforming_items / applicable_items) * 100) if applicable_items else 100
     db.commit()
-    return serialize_audit(get_audit_or_404(audit.id, db), current_user)
+    return serialize_audit(get_audit_or_404(audit.id, organization.id, db), current_user)

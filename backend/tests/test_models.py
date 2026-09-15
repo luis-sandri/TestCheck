@@ -16,4 +16,6 @@ def test_initial_schema_contains_the_mvp_entities() -> None:
         "user_sessions",
         "scenarios",
         "nonconformity_history",
+        "organizations",
+        "organization_memberships",
     }

@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from .auth import get_current_user
 from .database import get_db
-from .models import Scenario, TestCase, User, UserRole
+from .models import Organization, Scenario, TestCase, User, UserRole
+from .organizations import get_current_organization
 from .schemas import TestCaseInput, TestCaseOutput
 
 
@@ -45,9 +46,11 @@ def serialize_case(test_case: TestCase) -> TestCaseOutput:
     )
 
 
-def get_case_or_404(case_id: str, db: Session) -> TestCase:
+def get_case_or_404(case_id: str, organization_id: str, db: Session) -> TestCase:
     test_case = db.scalar(
-        select(TestCase).options(selectinload(TestCase.author), selectinload(TestCase.scenario)).where(TestCase.id == case_id)
+        select(TestCase)
+        .options(selectinload(TestCase.author), selectinload(TestCase.scenario))
+        .where(TestCase.id == case_id, TestCase.organization_id == organization_id)
     )
     if test_case is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Caso de teste não encontrado.")
@@ -59,8 +62,11 @@ def ensure_can_edit(test_case: TestCase, user: User) -> None:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Você não pode alterar este caso.")
 
 
-def next_code(db: Session) -> str:
-    codes = db.scalars(select(TestCase.code)).all()
+def next_code(db: Session, organization_id: str, scenario_id: str | None) -> str:
+    """Numera os casos de forma independente no geral e em cada cenário."""
+    statement = select(TestCase.code).where(TestCase.organization_id == organization_id)
+    statement = statement.where(TestCase.scenario_id == scenario_id) if scenario_id else statement.where(TestCase.scenario_id.is_(None))
+    codes = db.scalars(statement).all()
     used_numbers = [int(code.removeprefix("TC-")) for code in codes if code.startswith("TC-") and code[3:].isdigit()]
     return f"TC-{(max(used_numbers, default=0) + 1):03d}"
 
@@ -89,9 +95,13 @@ def apply_workflow_roles(values: dict[str, str | None], scenario: Scenario | Non
 def list_test_cases(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> list[TestCaseOutput]:
     cases = db.scalars(
-        select(TestCase).options(selectinload(TestCase.author), selectinload(TestCase.scenario)).order_by(TestCase.created_at.desc())
+        select(TestCase)
+        .options(selectinload(TestCase.author), selectinload(TestCase.scenario))
+        .where(TestCase.organization_id == organization.id)
+        .order_by(TestCase.created_at.desc())
     ).all()
     return [serialize_case(test_case) for test_case in cases]
 
@@ -101,19 +111,25 @@ def create_test_case(
     payload: TestCaseInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> TestCaseOutput:
     values = payload.model_dump()
     scenario = None
     if values["scenario_id"]:
-        scenario = db.get(Scenario, values["scenario_id"])
+        scenario = db.scalar(select(Scenario).where(Scenario.id == values["scenario_id"], Scenario.organization_id == organization.id))
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cenário não encontrado.")
     apply_workflow_roles(values, scenario, current_user)
-    test_case = TestCase(code=next_code(db), author_id=current_user.id, **values)
+    test_case = TestCase(
+        code=next_code(db, organization.id, values["scenario_id"]),
+        organization_id=organization.id,
+        author_id=current_user.id,
+        **values,
+    )
     db.add(test_case)
     db.commit()
     db.refresh(test_case)
-    return serialize_case(get_case_or_404(test_case.id, db))
+    return serialize_case(get_case_or_404(test_case.id, organization.id, db))
 
 
 @router.get("/{case_id}", response_model=TestCaseOutput)
@@ -121,8 +137,9 @@ def get_test_case(
     case_id: str,
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> TestCaseOutput:
-    return serialize_case(get_case_or_404(case_id, db))
+    return serialize_case(get_case_or_404(case_id, organization.id, db))
 
 
 @router.put("/{case_id}", response_model=TestCaseOutput)
@@ -131,22 +148,25 @@ def update_test_case(
     payload: TestCaseInput,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> TestCaseOutput:
-    test_case = get_case_or_404(case_id, db)
+    test_case = get_case_or_404(case_id, organization.id, db)
     ensure_can_edit(test_case, current_user)
     values = payload.model_dump()
     scenario = None
     if values["scenario_id"]:
-        scenario = db.get(Scenario, values["scenario_id"])
+        scenario = db.scalar(select(Scenario).where(Scenario.id == values["scenario_id"], Scenario.organization_id == organization.id))
         if scenario is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cenário não encontrado.")
     if not values["responsible_email"]:
         values["responsible_email"] = test_case.responsible_email or test_case.author.email
     apply_workflow_roles(values, scenario, test_case.author)
+    if test_case.scenario_id != values["scenario_id"]:
+        test_case.code = next_code(db, organization.id, values["scenario_id"])
     for field, value in values.items():
         setattr(test_case, field, value)
     db.commit()
-    return serialize_case(get_case_or_404(case_id, db))
+    return serialize_case(get_case_or_404(case_id, organization.id, db))
 
 
 @router.delete("/{case_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -154,8 +174,9 @@ def delete_test_case(
     case_id: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> Response:
-    test_case = get_case_or_404(case_id, db)
+    test_case = get_case_or_404(case_id, organization.id, db)
     ensure_can_edit(test_case, current_user)
     if test_case.audits:
         raise HTTPException(

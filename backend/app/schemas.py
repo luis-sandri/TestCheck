@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from datetime import datetime
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from .models import (
     AuditStatus,
@@ -10,13 +12,27 @@ from .models import (
     NonconformitySeverity,
     NonconformityStatus,
     UserRole,
+    OrganizationRole,
 )
+
+
+class OrganizationOutput(BaseModel):
+    id: str
+    name: str
+    role: OrganizationRole
+
+
+class PublicOrganizationOutput(BaseModel):
+    id: str
+    name: str
 
 
 class RegisterInput(BaseModel):
     full_name: str = Field(min_length=3, max_length=120)
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=8, max_length=72)
+    organization_name: str = Field(default="", max_length=160)
+    organization_id: str | None = Field(default=None, max_length=36)
 
     @field_validator("full_name")
     @classmethod
@@ -30,6 +46,17 @@ class RegisterInput(BaseModel):
         if "@" not in email or email.startswith("@") or email.endswith("@"):
             raise ValueError("Informe um e-mail válido.")
         return email
+
+    @field_validator("organization_name")
+    @classmethod
+    def clean_organization_name(cls, value: str) -> str:
+        return " ".join(value.split())
+
+    @model_validator(mode="after")
+    def require_organization_choice(self) -> RegisterInput:
+        if bool(self.organization_name) == bool(self.organization_id):
+            raise ValueError("Crie uma organização ou selecione uma existente.")
+        return self
 
 
 class LoginInput(BaseModel):
@@ -47,6 +74,25 @@ class UserOutput(BaseModel):
     full_name: str
     email: str
     role: UserRole
+    active_organization: OrganizationOutput | None
+    organizations: list[OrganizationOutput]
+
+
+class OrganizationCreateInput(BaseModel):
+    name: str = Field(min_length=3, max_length=160)
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        return " ".join(value.split())
+
+
+class OrganizationJoinInput(BaseModel):
+    organization_id: str = Field(min_length=1, max_length=36)
+
+
+class OrganizationSelectInput(OrganizationJoinInput):
+    pass
 
 
 class TestCaseInput(BaseModel):

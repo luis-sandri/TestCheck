@@ -27,6 +27,11 @@ class UserRole(StrEnum):
     ADMIN = "ADMIN"
 
 
+class OrganizationRole(StrEnum):
+    OWNER = "OWNER"
+    MEMBER = "MEMBER"
+
+
 class AuditStatus(StrEnum):
     DRAFT = "DRAFT"
     COMPLETED = "COMPLETED"
@@ -81,6 +86,9 @@ class User(Base):
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, native_enum=False), default=UserRole.RESPONSIBLE
     )
+    active_organization_id: Mapped[str | None] = mapped_column(
+        ForeignKey("organizations.id"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -101,6 +109,48 @@ class User(Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     scenarios: Mapped[list[Scenario]] = relationship(back_populates="created_by")
+    organization_memberships: Mapped[list[OrganizationMembership]] = relationship(
+        back_populates="user", foreign_keys="OrganizationMembership.user_id", cascade="all, delete-orphan"
+    )
+    active_organization: Mapped[Organization | None] = relationship(
+        foreign_keys=[active_organization_id]
+    )
+
+
+class Organization(Base):
+    """Espaço de trabalho que isola os dados de cada equipe."""
+
+    __tablename__ = "organizations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
+    name: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    memberships: Mapped[list[OrganizationMembership]] = relationship(
+        back_populates="organization", cascade="all, delete-orphan"
+    )
+    scenarios: Mapped[list[Scenario]] = relationship(back_populates="organization")
+    test_cases: Mapped[list[TestCase]] = relationship(back_populates="organization")
+
+
+class OrganizationMembership(Base):
+    __tablename__ = "organization_memberships"
+    __table_args__ = (UniqueConstraint("organization_id", "user_id", name="uq_organization_member"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    role: Mapped[OrganizationRole] = mapped_column(
+        Enum(OrganizationRole, native_enum=False), default=OrganizationRole.MEMBER
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    organization: Mapped[Organization] = relationship(back_populates="memberships")
+    user: Mapped[User] = relationship(back_populates="organization_memberships", foreign_keys=[user_id])
 
 
 class Scenario(Base):
@@ -110,7 +160,8 @@ class Scenario(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
     name: Mapped[str] = mapped_column(String(180))
-    zephyr_folder: Mapped[str] = mapped_column(String(500), unique=True, index=True)
+    zephyr_folder: Mapped[str] = mapped_column(String(500), index=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     reviewer_email: Mapped[str] = mapped_column(String(255))
     supervisor_email: Mapped[str] = mapped_column(String(255))
     created_by_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
@@ -119,6 +170,7 @@ class Scenario(Base):
     )
 
     created_by: Mapped[User] = relationship(back_populates="scenarios")
+    organization: Mapped[Organization] = relationship(back_populates="scenarios")
     test_cases: Mapped[list[TestCase]] = relationship(back_populates="scenario")
 
 
@@ -126,7 +178,7 @@ class TestCase(Base):
     __tablename__ = "test_cases"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_key)
-    code: Mapped[str] = mapped_column(String(20), unique=True, index=True)
+    code: Mapped[str] = mapped_column(String(20), index=True)
     zephyr_key: Mapped[str | None] = mapped_column(String(100))
     title: Mapped[str] = mapped_column(String(180))
     description: Mapped[str | None] = mapped_column(Text)
@@ -136,6 +188,7 @@ class TestCase(Base):
     expected_result: Mapped[str | None] = mapped_column(Text)
     approval_criteria: Mapped[str | None] = mapped_column(Text)
     scenario_id: Mapped[str | None] = mapped_column(ForeignKey("scenarios.id"), index=True)
+    organization_id: Mapped[str] = mapped_column(ForeignKey("organizations.id"), nullable=False, index=True)
     author_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     responsible_email: Mapped[str | None] = mapped_column(String(255))
     reviewer_email: Mapped[str | None] = mapped_column(String(255))
@@ -148,6 +201,7 @@ class TestCase(Base):
     )
 
     author: Mapped[User] = relationship(back_populates="authored_test_cases")
+    organization: Mapped[Organization] = relationship(back_populates="test_cases")
     scenario: Mapped[Scenario | None] = relationship(back_populates="test_cases")
     audits: Mapped[list[Audit]] = relationship(back_populates="test_case", cascade="all, delete-orphan")
     nonconformities: Mapped[list[Nonconformity]] = relationship(back_populates="test_case")

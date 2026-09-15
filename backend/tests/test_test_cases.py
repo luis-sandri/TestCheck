@@ -34,7 +34,7 @@ def client() -> Generator[TestClient, None, None]:
 def authenticate(client: TestClient) -> None:
     response = client.post(
         "/auth/register",
-        json={"full_name": "Luís Sandri", "email": "luis@example.com", "password": "senha-segura-123"},
+        json={"full_name": "Luís Sandri", "email": "luis@example.com", "password": "senha-segura-123", "organization_name": "Equipe Teste"},
     )
     assert response.status_code == 201
 
@@ -115,3 +115,21 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     )
     assert reviewed.status_code == 200
     assert reviewed.json()["status"] == "RESOLVED"
+
+
+def test_numbering_and_data_are_scoped_by_scenario_and_organization(client: TestClient) -> None:
+    authenticate(client)
+    general_one = client.post("/test-cases", json={"title": "Geral 1", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
+    general_two = client.post("/test-cases", json={"title": "Geral 2", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
+    assert general_one.json()["code"] == "TC-001"
+    assert general_two.json()["code"] == "TC-002"
+
+    second_user = TestClient(app)
+    registration = second_user.post("/auth/register", json={"full_name": "André Murilo", "email": "andre@example.com", "password": "senha-segura-123", "organization_name": "Outra Equipe"})
+    assert registration.status_code == 201
+    isolated_case = second_user.post("/test-cases", json={"title": "Caso isolado", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
+    assert isolated_case.status_code == 201
+    assert isolated_case.json()["code"] == "TC-001"
+    assert len(client.get("/test-cases").json()) == 2
+    assert len(second_user.get("/test-cases").json()) == 1
+    second_user.close()

@@ -8,6 +8,7 @@ from . import models  # noqa: F401 - registra as tabelas do schema inicial
 from .auth import router as auth_router
 from .audits import router as audit_router
 from .nonconformities import router as nonconformity_router
+from .organizations import router as organization_router
 from .scenarios import router as scenario_router
 from .test_cases import router as test_case_router
 
@@ -38,6 +39,7 @@ async def disable_api_response_cache(request: Request, call_next):
 
 
 app.include_router(auth_router)
+app.include_router(organization_router)
 app.include_router(test_case_router)
 app.include_router(audit_router)
 app.include_router(nonconformity_router)
@@ -61,6 +63,9 @@ def ensure_database_ready() -> None:
             connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS supervisor_email VARCHAR(255)"))
             connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS scenario_id VARCHAR(36)"))
             connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS zephyr_key VARCHAR(100)"))
+            connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS active_organization_id VARCHAR(36)"))
+            connection.execute(text("ALTER TABLE scenarios ADD COLUMN IF NOT EXISTS organization_id VARCHAR(36)"))
+            connection.execute(text("ALTER TABLE test_cases ADD COLUMN IF NOT EXISTS organization_id VARCHAR(36)"))
             connection.execute(text("ALTER TABLE audit_items ADD COLUMN IF NOT EXISTS suggested_result VARCHAR(32)"))
             connection.execute(text("ALTER TABLE audit_items ADD COLUMN IF NOT EXISTS final_result VARCHAR(32)"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS resolution_due_at TIMESTAMP WITH TIME ZONE"))
@@ -70,6 +75,17 @@ def ensure_database_ready() -> None:
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS escalated_at TIMESTAMP WITH TIME ZONE"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS supervisor_email VARCHAR(255)"))
             connection.execute(text("ALTER TABLE nonconformities ADD COLUMN IF NOT EXISTS final_decision TEXT"))
+            connection.execute(text("ALTER TABLE test_cases DROP CONSTRAINT IF EXISTS test_cases_code_key"))
+            connection.execute(text("DROP INDEX IF EXISTS ix_test_cases_code"))
+            connection.execute(text("DROP INDEX IF EXISTS ix_scenarios_zephyr_folder"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_test_cases_code ON test_cases (code)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_scenarios_zephyr_folder ON scenarios (zephyr_folder)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_users_active_organization_id ON users (active_organization_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_scenarios_organization_id ON scenarios (organization_id)"))
+            connection.execute(text("CREATE INDEX IF NOT EXISTS ix_test_cases_organization_id ON test_cases (organization_id)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_scenarios_organization_folder ON scenarios (organization_id, zephyr_folder)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_test_case_code_by_scenario ON test_cases (organization_id, scenario_id, code)"))
+            connection.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_test_case_code_general ON test_cases (organization_id, code) WHERE scenario_id IS NULL"))
         connection.execute(text("SELECT 1"))
 
 

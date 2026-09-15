@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session, selectinload
 
 from .auth import get_current_user
 from .database import get_db
-from .models import Scenario, TestCase, User
+from .models import Organization, Scenario, TestCase, User
+from .organizations import get_current_organization
 from .schemas import ScenarioOutput, ZephyrImportOutput
 from .test_cases import next_code
 
@@ -285,31 +286,37 @@ def serialize_scenario(scenario: Scenario) -> ScenarioOutput:
 def list_scenarios(
     db: Session = Depends(get_db),
     _: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> list[ScenarioOutput]:
     scenarios = db.scalars(
-        select(Scenario).options(selectinload(Scenario.test_cases)).order_by(Scenario.created_at.desc())
+        select(Scenario)
+        .options(selectinload(Scenario.test_cases))
+        .where(Scenario.organization_id == organization.id)
+        .order_by(Scenario.created_at.desc())
     ).all()
     return [serialize_scenario(scenario) for scenario in scenarios]
 
 
 @router.post("/import-zephyr", response_model=ZephyrImportOutput, status_code=status.HTTP_201_CREATED)
 async def import_zephyr_file(
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     reviewer_email: str = Form(...),
     supervisor_email: str = Form(...),
     owner_email_map: str = Form("{}"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    organization: Organization = Depends(get_current_organization),
 ) -> ZephyrImportOutput:
-    if not file.filename:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione um arquivo exportado pelo Zephyr.")
+    if not files or any(not file.filename for file in files):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione ao menos um arquivo exportado pelo Zephyr.")
     reviewer_email = clean_email(reviewer_email, "revisor")
     supervisor_email = clean_email(supervisor_email, "supervisor")
     if supervisor_email == current_user.email:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O supervisor deve ser diferente de quem importou o cenário.")
 
-    raw_rows = parse_zephyr_file(file.filename, await file.read())
-    cases = consolidate_cases(raw_rows)
+    cases: list[dict[str, str | list[str]]] = []
+    for file in files:
+        cases.extend(consolidate_cases(parse_zephyr_file(file.filename or "", await file.read())))
     if not cases:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Nenhum caso com título foi encontrado no arquivo.")
     resolved_cases = resolve_responsibles(cases, read_owner_mapping(owner_email_map), supervisor_email)
@@ -320,12 +327,15 @@ async def import_zephyr_file(
         scenario = imported_scenarios.get(folder)
         if scenario is None:
             scenario = db.scalar(
-                select(Scenario).options(selectinload(Scenario.test_cases)).where(Scenario.zephyr_folder == folder)
+                select(Scenario)
+                .options(selectinload(Scenario.test_cases))
+                .where(Scenario.zephyr_folder == folder, Scenario.organization_id == organization.id)
             )
             if scenario is None:
                 scenario = Scenario(
                     name=folder.split("/")[-1].strip() or folder,
                     zephyr_folder=folder,
+                    organization_id=organization.id,
                     reviewer_email=reviewer_email,
                     supervisor_email=supervisor_email,
                     created_by_id=current_user.id,
@@ -337,10 +347,11 @@ async def import_zephyr_file(
                 scenario.supervisor_email = supervisor_email
             imported_scenarios[folder] = scenario
         test_case = TestCase(
-            code=next_code(db),
+            code=next_code(db, organization.id, scenario.id),
             zephyr_key=str(case["source_key"]) or None,
             title=str(case["title"]),
             scenario_id=scenario.id,
+            organization_id=organization.id,
             author_id=current_user.id,
             responsible_email=responsible_email,
             description=str(case["description"]),
@@ -351,6 +362,9 @@ async def import_zephyr_file(
             approval_criteria=str(case["approval_criteria"]),
         )
         db.add(test_case)
+        # A sessão do projeto não faz autoflush; persista o caso antes de
+        # calcular a próxima numeração do mesmo cenário no mesmo lote.
+        db.flush()
 
     db.commit()
     persisted_scenarios = db.scalars(

@@ -5,7 +5,9 @@ import './App.css'
 type ApiStatus = 'checking' | 'online' | 'offline'
 type AuthMode = 'login' | 'register'
 type PageName = 'dashboard' | 'test-cases' | 'audits' | 'nonconformities'
-type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN' }
+type OrganizationData = { id: string; name: string; role: 'OWNER' | 'MEMBER' }
+type PublicOrganizationData = { id: string; name: string }
+type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN'; active_organization: OrganizationData | null; organizations: OrganizationData[] }
 type TestCaseData = {
   id: string; code: string; zephyr_key: string | null; title: string; description: string; preconditions: string; steps: string
   test_data: string; expected_result: string; approval_criteria: string; author_name: string; responsible_email: string; reviewer_email: string; supervisor_email: string; scenario_id: string | null; scenario_name: string | null
@@ -138,8 +140,8 @@ function Toast({ message, onDismiss }: { message: string; onDismiss: () => void 
   </div>
 }
 
-function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout }: {
-  active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void
+function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout, onOrganizationChange }: {
+  active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void
 }) {
   const [isOpen, setIsOpen] = useState(() => {
     const savedState = window.sessionStorage.getItem('testcheck-sidebar-open')
@@ -168,12 +170,19 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
         <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><NavIcon name="nonconformities" /> Não conformidades</a>
       </nav>
       <div className="sidebar-footer">
+        {user.active_organization && <label className="organization-switcher"><span>Organização</span><SiteSelect value={user.active_organization.id} ariaLabel="Alternar organização" onChange={onOrganizationChange} options={user.organizations.map((organization) => ({ value: organization.id, label: organization.name, description: organization.role === 'OWNER' ? 'Você é proprietário' : 'Você participa' }))} /></label>}
         <button className="account-menu-trigger" type="button" aria-expanded={accountMenuOpen} aria-label="Abrir opções da conta" onClick={() => setAccountMenuOpen((current) => !current)}><span className="avatar">{initials(user.full_name)}</span><span className="account-user-details"><strong>{user.full_name}</strong><span>{roleLabel}</span></span></button>
         <button className="logout-button" onClick={onLogout} type="button">Sair</button>
         {accountMenuOpen && <div className="account-menu"><strong>{user.full_name}</strong><span>{roleLabel}</span><button type="button" onClick={onLogout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}
       </div>
     </aside>
   </>
+}
+
+function OrganizationChoiceFields({ organizations, mode, organizationName, organizationId, onModeChange, onNameChange, onOrganizationChange }: {
+  organizations: PublicOrganizationData[]; mode: 'create' | 'join'; organizationName: string; organizationId: string; onModeChange: (mode: 'create' | 'join') => void; onNameChange: (name: string) => void; onOrganizationChange: (organizationId: string) => void
+}) {
+  return <fieldset className="organization-choice"><legend>Organização</legend><p>Os dados ficam separados por organização.</p><div className="organization-choice-actions"><button type="button" className={mode === 'create' ? 'choice-button is-selected' : 'choice-button'} onClick={() => onModeChange('create')}>Criar organização</button><button type="button" className={mode === 'join' ? 'choice-button is-selected' : 'choice-button'} onClick={() => onModeChange('join')} disabled={organizations.length === 0}>Entrar em existente</button></div>{mode === 'create' ? <label>Nome da organização<input value={organizationName} onChange={(event) => onNameChange(event.target.value)} placeholder="Ex.: Equipe Portal Acadêmico" minLength={3} required /></label> : <label>Organização existente<SiteSelect value={organizationId} onChange={onOrganizationChange} ariaLabel="Selecionar organização" options={[{ value: '', label: 'Selecione uma organização', description: 'Escolha a organização da qual deseja participar.' }, ...organizations.map((organization) => ({ value: organization.id, label: organization.name }))]} /></label>}</fieldset>
 }
 
 function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAuthenticated: (user: CurrentUser) => void }) {
@@ -183,15 +192,22 @@ function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAu
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
+  const [organizations, setOrganizations] = useState<PublicOrganizationData[]>([])
+  const [organizationMode, setOrganizationMode] = useState<'create' | 'join'>('create')
+  const [organizationName, setOrganizationName] = useState('')
+  const [organizationId, setOrganizationId] = useState('')
+
+  useEffect(() => { void fetch('/api/organizations/public', apiReadOptions).then(async (response) => { if (response.ok) setOrganizations(await response.json() as PublicOrganizationData[]) }).catch(() => undefined) }, [])
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setError('')
+    if (mode === 'register' && organizationMode === 'join' && !organizationId) { setError('Selecione a organização à qual deseja entrar.'); return }
     setSubmitting(true)
     try {
       const response = await fetch(`/api/auth/${mode === 'login' ? 'login' : 'register'}`, {
         method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(mode === 'login' ? { email, password } : { full_name: fullName, email, password }),
+        body: JSON.stringify(mode === 'login' ? { email, password } : { full_name: fullName, email, password, ...(organizationMode === 'create' ? { organization_name: organizationName } : { organization_id: organizationId }) }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.detail || 'Não foi possível continuar.')
@@ -210,6 +226,7 @@ function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAu
       {mode === 'register' && <label>Nome completo<input value={fullName} onChange={(event) => setFullName(event.target.value)} placeholder="Seu nome" minLength={3} required /></label>}
       <label>E-mail<input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="nome@exemplo.com" required /></label>
       <label>Senha<input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Mínimo de 8 caracteres" minLength={8} required /></label>
+      {mode === 'register' && <OrganizationChoiceFields organizations={organizations} mode={organizationMode} organizationName={organizationName} organizationId={organizationId} onModeChange={setOrganizationMode} onNameChange={setOrganizationName} onOrganizationChange={setOrganizationId} />}
       {error && <p className="form-error" role="alert">{error}</p>}
       <button className="primary-button auth-submit" type="submit" disabled={submitting || apiStatus !== 'online'}>{submitting ? 'Aguarde…' : mode === 'login' ? 'Entrar' : 'Criar conta'}</button>
     </form>
@@ -218,7 +235,29 @@ function AuthScreen({ apiStatus, onAuthenticated }: { apiStatus: ApiStatus; onAu
   </section></main>
 }
 
-function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, onScenariosChanged, onBack, onOpenAudits, onOpenNonconformities, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; selectedScenarioId: string; onScenarioChange: (value: string) => void; onScenariosChanged: () => Promise<void>; onBack: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void; onLogout: () => void }) {
+function OrganizationSetupScreen({ user, onReady, onLogout }: { user: CurrentUser; onReady: (user: CurrentUser) => void; onLogout: () => void }) {
+  const [organizations, setOrganizations] = useState<PublicOrganizationData[]>([])
+  const [mode, setMode] = useState<'create' | 'join'>('create')
+  const [organizationName, setOrganizationName] = useState('')
+  const [organizationId, setOrganizationId] = useState('')
+  const [error, setError] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  useEffect(() => { void fetch('/api/organizations/public', apiReadOptions).then(async (response) => { if (response.ok) setOrganizations(await response.json() as PublicOrganizationData[]) }).catch(() => setError('Não foi possível carregar as organizações.')) }, [])
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); setError('')
+    if (mode === 'join' && !organizationId) { setError('Selecione a organização à qual deseja entrar.'); return }
+    setSubmitting(true)
+    try {
+      const response = await fetch(mode === 'create' ? '/api/organizations' : '/api/organizations/join', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mode === 'create' ? { name: organizationName } : { organization_id: organizationId }) })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) throw new Error(payload.detail || 'Não foi possível definir a organização.')
+      onReady(payload as CurrentUser)
+    } catch (requestError) { setError(requestError instanceof Error ? requestError.message : 'Não foi possível definir a organização.') } finally { setSubmitting(false) }
+  }
+  return <main className="auth-page"><section className="auth-card organization-setup-card"><div className="auth-brand"><span className="brand-mark" aria-hidden="true">✓</span><div><strong>TestCheck</strong><span>Qualidade de Software</span></div></div><p className="eyebrow">PRIMEIRO ACESSO</p><h1>Escolha sua organização</h1><p className="subtitle">Olá, {user.full_name}. Crie uma organização para sua equipe ou entre em uma já existente.</p><form className="auth-form" onSubmit={submit}><OrganizationChoiceFields organizations={organizations} mode={mode} organizationName={organizationName} organizationId={organizationId} onModeChange={setMode} onNameChange={setOrganizationName} onOrganizationChange={setOrganizationId} />{error && <p className="form-error" role="alert">{error}</p>}<button className="primary-button auth-submit" type="submit" disabled={submitting}>{submitting ? 'Aguarde…' : mode === 'create' ? 'Criar e continuar' : 'Entrar na organização'}</button></form><p className="auth-switch"><button type="button" onClick={onLogout}>Sair da conta</button></p></section></main>
+}
+
+function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, onScenariosChanged, onBack, onOpenAudits, onOpenNonconformities, onLogout, onOrganizationChange }: { apiStatus: ApiStatus; user: CurrentUser; selectedScenarioId: string; onScenarioChange: (value: string) => void; onScenariosChanged: () => Promise<void>; onBack: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
   const [scenarios, setScenarios] = useState<ScenarioData[]>([])
   const [form, setForm] = useState<TestCaseForm>(() => blankTestCase(user.email))
@@ -227,7 +266,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [caseToDelete, setCaseToDelete] = useState<TestCaseData | null>(null)
-  const [zephyrFile, setZephyrFile] = useState<File | null>(null)
+  const [zephyrFiles, setZephyrFiles] = useState<File[]>([])
   const [reviewerEmail, setReviewerEmail] = useState(user.email)
   const [supervisorEmail, setSupervisorEmail] = useState('')
   const [ownersToMap, setOwnersToMap] = useState<ZephyrOwnerRequest[]>([])
@@ -235,7 +274,6 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   const [importing, setImporting] = useState(false)
   const [showCaseEditor, setShowCaseEditor] = useState(false)
   const [showImportPanel, setShowImportPanel] = useState(false)
-  const caseEditorRef = useRef<HTMLFormElement>(null)
   const importPanelRef = useRef<HTMLFormElement>(null)
 
   const loadCases = async () => {
@@ -254,7 +292,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   useEffect(() => { void loadCases() }, [])
   const importZephyr = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!zephyrFile) { setMessage('Selecione um arquivo .xlsx, .xml ou .csv exportado pelo Zephyr.'); return }
+    if (zephyrFiles.length === 0) { setMessage('Selecione ao menos um arquivo .xlsx, .xml ou .csv exportado pelo Zephyr.'); return }
     if (ownersToMap.some(({ identifier }) => !ownerEmailMap[identifier]?.trim())) {
       setMessage('Informe o e-mail de cada responsável identificado pelo Zephyr.')
       return
@@ -263,7 +301,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     setMessage('')
     try {
       const payload = new FormData()
-      payload.append('file', zephyrFile)
+      zephyrFiles.forEach((file) => payload.append('files', file))
       payload.append('reviewer_email', reviewerEmail)
       payload.append('supervisor_email', supervisorEmail)
       payload.append('owner_email_map', JSON.stringify(ownerEmailMap))
@@ -277,13 +315,13 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
         }
         throw new Error(typeof result.detail === 'string' ? result.detail : 'Não foi possível importar o arquivo.')
       }
-      setZephyrFile(null)
+      setZephyrFiles([])
       setOwnersToMap([])
       setOwnerEmailMap({})
       await loadCases()
       await onScenariosChanged()
       setShowImportPanel(false)
-      setMessage(`${result.imported_cases ?? 0} caso(s) importado(s) e organizado(s) por cenário.`)
+      setMessage(`${result.imported_cases ?? 0} caso(s) importado(s) em ${result.scenarios?.length ?? 0} cenário(s).`)
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível importar o arquivo.') } finally { setImporting(false) }
   }
   const setField = (field: keyof TestCaseForm, value: string) => setForm((current) => ({ ...current, [field]: value }))
@@ -316,13 +354,11 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     setEditingId(id)
     setForm({ ...values, scenario_id: values.scenario_id || '' })
     setShowCaseEditor(true)
-    window.requestAnimationFrame(() => caseEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
   const reset = () => { setEditingId(null); setForm(blankTestCase(user.email)); setMessage('') }
   const openNewCase = () => {
     reset()
     setShowCaseEditor(true)
-    window.requestAnimationFrame(() => caseEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   }
   const toggleImportPanel = () => {
     if (showImportPanel) { setShowImportPanel(false); return }
@@ -354,14 +390,14 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   const visibleScenarios = selectedScenarioId ? scenarios.filter((scenario) => scenario.id === selectedScenarioId) : scenarios
   const visibleCases = selectedScenarioId ? cases.filter((testCase) => testCase.scenario_id === selectedScenarioId) : cases
 
-  return <div className="app-shell"><Sidebar active="test-cases" user={user} onDashboard={onBack} onCases={() => undefined} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
+  return <div className="app-shell"><Sidebar active="test-cases" user={user} onDashboard={onBack} onCases={() => undefined} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} onOrganizationChange={onOrganizationChange} /><main>
     <header className="topbar"><div><p className="eyebrow">CASOS E CENÁRIOS</p><h1>Cenários e casos de teste</h1><p className="subtitle">Crie casos gerais ou organize os casos importados em cenários do Zephyr.</p></div><div className="topbar-actions case-topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /><button className="secondary-button" type="button" aria-expanded={showImportPanel} aria-controls="zephyr-import-panel" onClick={toggleImportPanel}>Importar do Zephyr <span aria-hidden="true">{showImportPanel ? '⌃' : '⌄'}</span></button><button className="primary-button" type="button" onClick={openNewCase}>＋ Criar caso</button></div></header>
-    <section className={`case-workspace ${showCaseEditor ? '' : 'list-only'}`}>
-    {showCaseEditor && <form className="panel case-form" ref={caseEditorRef} onSubmit={save}>
-      <div className="panel-header"><div><h2>{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco geram apenas uma sugestão; o revisor decide o resultado final.</p></div></div>
+    <section className="case-workspace list-only">
+    {showCaseEditor && <div className="modal-backdrop" role="presentation"><form className="case-editor-modal case-form" onSubmit={save} role="dialog" aria-modal="true" aria-labelledby="case-editor-title">
+      <div className="panel-header"><div><h2 id="case-editor-title">{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco geram apenas uma sugestão; o revisor decide o resultado final.</p></div><button className="modal-close" type="button" aria-label="Fechar formulário" onClick={closeCaseEditor}>×</button></div>
       <div className="form-fields"><label>Cenário <span className="field-hint">Opcional. Sem cenário, o caso é geral.</span><SiteSelect value={form.scenario_id || ''} onChange={(value) => setField('scenario_id', value)} ariaLabel="Cenário do caso de teste" options={[{ value: '', label: 'Geral (sem cenário)', description: 'Este caso não será associado a um cenário.' }, ...scenarios.map((scenario) => ({ value: scenario.id, label: scenario.name, description: `${scenario.test_case_count} caso(s) no cenário` }))]} /></label><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pelo caso * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label>{form.scenario_id ? <p className="workflow-summary"><strong>Papéis definidos pelo cenário</strong><span>Revisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.reviewer_email || form.reviewer_email}</span><span>Supervisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.supervisor_email || form.supervisor_email}</span></p> : <><label>Revisor * <span className="field-hint">Define o resultado final da auditoria e valida correções.</span><input type="email" value={form.reviewer_email} onChange={(event) => setField('reviewer_email', event.target.value)} placeholder="revisor@exemplo.com" required /></label><label>Supervisor * <span className="field-hint">Decide quando uma NC for contestada ou escalada.</span><input type="email" value={form.supervisor_email} onChange={(event) => setField('supervisor_email', event.target.value)} placeholder="supervisor@exemplo.com" required /></label></>}<label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
       <div className="form-actions"><button className="text-button" type="button" onClick={closeCaseEditor}>{editingId ? 'Cancelar edição' : 'Cancelar criação'}</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
-    </form>}
+    </form></div>}
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${visibleCases.length} caso(s) no filtro atual.`}</p></div></div>
       <div className="case-list-content">{!loading && visibleCases.length === 0 && <p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Ainda não há casos de teste. Crie um caso geral ou importe um arquivo do Zephyr.'}</p>}{visibleCases.map((testCase) => <article className="case-summary" key={testCase.id}><div><span className="case-code">{testCase.code}</span><h3>{testCase.title}</h3>{testCase.zephyr_key && <p>Origem Zephyr: {testCase.zephyr_key}</p>}<p>Cenário: {testCase.scenario_name || 'Geral'}</p><p>Autor: {testCase.author_name}</p><p>Responsável: {testCase.responsible_email}</p><p>Revisor: {testCase.reviewer_email}</p><p>Supervisor: {testCase.supervisor_email || 'não definido'}</p></div><div className="case-summary-actions"><button className="case-action-button edit" type="button" onClick={() => edit(testCase)}><span aria-hidden="true">✎</span> Editar</button><button className="case-action-button delete" type="button" onClick={() => setCaseToDelete(testCase)}><span aria-hidden="true">×</span> Excluir</button></div></article>)}</div>
       <ApiState status={apiStatus} />
@@ -369,7 +405,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     {showImportPanel && <form className="panel zephyr-import-panel" id="zephyr-import-panel" ref={importPanelRef} onSubmit={importZephyr}>
       <div className="panel-header"><div><p className="eyebrow">IMPORTAÇÃO DO ZEPHYR</p><h2>Importar casos e criar cenários</h2><p>Use o export original do Zephyr em Excel, XML ou CSV. Os folders agrupam os casos; revisor e supervisor são definidos para cada cenário criado.</p></div></div>
       <div className="form-fields compact-fields">
-        <label>Arquivo do Zephyr *<span className="field-hint">Formatos aceitos: .xlsx, .xml e .csv.</span><input type="file" accept=".xlsx,.xml,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml,text/csv" required onChange={(event) => { setZephyrFile(event.target.files?.[0] || null); setOwnersToMap([]); setOwnerEmailMap({}) }} /></label>
+        <label>Arquivos do Zephyr *<span className="field-hint">Selecione um ou vários arquivos .xlsx, .xml ou .csv. Os folders de todos eles serão criados como cenários.</span><input type="file" multiple accept=".xlsx,.xml,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/xml,text/xml,text/csv" required onChange={(event) => { setZephyrFiles(Array.from(event.target.files || [])); setOwnersToMap([]); setOwnerEmailMap({}) }} /></label>
         <label>Revisor do cenário *<span className="field-hint">Decide o resultado final e valida as correções.</span><input type="email" value={reviewerEmail} onChange={(event) => setReviewerEmail(event.target.value)} required /></label>
         <label>Supervisor para escalonamento *<span className="field-hint">Dá a palavra final em contestações e atrasos.</span><input type="email" value={supervisorEmail} onChange={(event) => setSupervisorEmail(event.target.value)} placeholder="supervisor@exemplo.com" required /></label>
       </div>
@@ -410,7 +446,7 @@ function AuditReviewModal({ audit, reviewItems, setReviewItems, busy, onClose, o
   </div>
 }
 
-function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onBack, onOpenCases, onOpenNonconformities, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onBack: () => void; onOpenCases: () => void; onOpenNonconformities: () => void; onLogout: () => void }) {
+function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onBack, onOpenCases, onOpenNonconformities, onLogout, onOrganizationChange }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onBack: () => void; onOpenCases: () => void; onOpenNonconformities: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
   const [audits, setAudits] = useState<AuditData[]>([])
   const [loading, setLoading] = useState(true)
@@ -463,7 +499,7 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
   const latestAuditByCase = new Map<string, AuditData>()
   for (const audit of audits) if (!latestAuditByCase.has(audit.test_case_id)) latestAuditByCase.set(audit.test_case_id, audit)
 
-  return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main>
+  return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} onOrganizationChange={onOrganizationChange} /><main>
     <header className="topbar"><div><p className="eyebrow">AUDITORIA ASSISTIDA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Execute o caso, revise as sugestões e confirme o resultado final em uma única fila.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
     <section className="panel audit-table-panel"><div className="panel-header"><div><h2>Fila de auditorias</h2><p>Use a ação indicada em cada linha para avançar o caso para a próxima etapa.</p></div></div>
       <div className="table-wrap"><table className="audit-table"><thead><tr><th>Caso de teste</th><th>Cenário</th><th>Status</th><th>Resultado</th><th>Ação</th></tr></thead><tbody>
@@ -482,7 +518,7 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
     <Toast message={message} onDismiss={() => setMessage('')} />
   </main></div>
 }
-function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onBack, onOpenCases, onOpenAudits, onLogout }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onBack: () => void; onOpenCases: () => void; onOpenAudits: () => void; onLogout: () => void }) {
+function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onBack, onOpenCases, onOpenAudits, onLogout, onOrganizationChange }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onBack: () => void; onOpenCases: () => void; onOpenAudits: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void }) {
   const [nonconformities, setNonconformities] = useState<NonconformityData[]>([])
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
@@ -569,7 +605,7 @@ function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, o
   }
   const visibleNonconformities = selectedScenarioId ? nonconformities.filter((nonconformity) => nonconformity.scenario_id === selectedScenarioId) : nonconformities
 
-  return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} /><main>
+  return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} onOrganizationChange={onOrganizationChange} /><main>
     <header className="topbar"><div><p className="eyebrow">CICLO DE VIDA E ESCALONAMENTO</p><h1>Não conformidades</h1><p className="subtitle">Acompanhe cada NC desde a geração, passando por correção ou contestação, até a decisão final.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
     <section className="nonconformity-list">
       {!loading && visibleNonconformities.length === 0 && <section className="panel empty-state-panel"><div><h2>{selectedScenarioId ? 'Nenhuma NC neste cenário' : 'Nenhuma não conformidade atribuída'}</h2><p className="empty-state">{selectedScenarioId ? 'Altere ou limpe o filtro para consultar os demais cenários.' : 'Quando uma auditoria confirmar um desvio, a não conformidade aparecerá aqui.'}</p></div><button className="secondary-button" type="button" onClick={selectedScenarioId ? () => onScenarioChange('') : onOpenAudits}>{selectedScenarioId ? 'Limpar filtro' : 'Abrir auditorias'}</button></section>}
@@ -591,7 +627,7 @@ function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, o
   </main></div>
 }
 
-function Dashboard({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onLogout, onOpenCases, onOpenAudits, onOpenNonconformities }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onLogout: () => void; onOpenCases: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void }) {
+function Dashboard({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onLogout, onOpenCases, onOpenAudits, onOpenNonconformities, onOrganizationChange }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onLogout: () => void; onOpenCases: () => void; onOpenAudits: () => void; onOpenNonconformities: () => void; onOrganizationChange: (organizationId: string) => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
   const [audits, setAudits] = useState<AuditData[]>([])
   const [nonconformities, setNonconformities] = useState<NonconformityData[]>([])
@@ -653,7 +689,7 @@ function Dashboard({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
     ...(casesWithoutAudit ? [{ id: 'cases-without-audit', title: 'Casos sem auditoria', description: 'Aguardam a primeira verificação.', meta: `${casesWithoutAudit} caso${casesWithoutAudit === 1 ? '' : 's'}`, tone: 'blue', target: 'audits' as const }] : []),
   ].slice(0, 3)
 
-  return <div className="app-shell"><Sidebar active="dashboard" user={user} onDashboard={() => undefined} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} /><main id="dashboard">
+  return <div className="app-shell"><Sidebar active="dashboard" user={user} onDashboard={() => undefined} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={onOpenNonconformities} onLogout={onLogout} onOrganizationChange={onOrganizationChange} /><main id="dashboard">
     <header className="topbar"><div><p className="eyebrow">PROJETO CHECKOUT</p><h1>Visão geral da qualidade</h1><p className="subtitle">Acompanhe auditorias, aderência e correções dos casos de teste.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /><button className="primary-button" type="button" onClick={onOpenAudits}>Abrir fila de auditorias <span aria-hidden="true">→</span></button></div></header>
     <section className="metrics" aria-label="Indicadores">
 <article className="metric-card"><span className="metric-icon blue">≡</span><div><span>Casos de teste</span><strong>{loading ? '—' : scopedCases.length}</strong></div><small>{loading ? 'Carregando…' : scopedCases.length ? `${scopedCases.length} caso${scopedCases.length === 1 ? '' : 's'} cadastrado${scopedCases.length === 1 ? '' : 's'}` : 'Nenhum caso cadastrado'}</small></article>
@@ -701,17 +737,27 @@ function App() {
     } catch { setScenarios([]) }
   }
   useEffect(() => {
-    if (user) void loadScenarios()
+    if (user?.active_organization) void loadScenarios()
     else setScenarios([])
   }, [user])
   useEffect(() => { window.sessionStorage.setItem('testcheck-scenario-filter', selectedScenarioId) }, [selectedScenarioId])
   const logout = async () => { await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }); setUser(null); setSelectedScenarioId(''); setView('dashboard') }
+  const selectOrganization = async (organizationId: string) => {
+    if (user?.active_organization?.id === organizationId) return
+    const response = await fetch('/api/organizations/select', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ organization_id: organizationId }) })
+    if (!response.ok) return
+    setSelectedScenarioId('')
+    setScenarios([])
+    setUser(await response.json() as CurrentUser)
+    setView('dashboard')
+  }
   if (loadingSession) return <main className="loading-page">Carregando TestCheck…</main>
   if (!user) return <AuthScreen apiStatus={apiStatus} onAuthenticated={setUser} />
-  if (view === 'test-cases') return <TestCasesPage apiStatus={apiStatus} user={user} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onScenariosChanged={loadScenarios} onBack={() => setView('dashboard')} onOpenAudits={() => setView('audits')} onOpenNonconformities={() => setView('nonconformities')} onLogout={logout} />
-  if (view === 'audits') return <AuditPage apiStatus={apiStatus} user={user} scenarios={scenarios} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onOpenNonconformities={() => setView('nonconformities')} onLogout={logout} />
-  if (view === 'nonconformities') return <NonconformitiesPage apiStatus={apiStatus} user={user} scenarios={scenarios} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} onLogout={logout} />
-  return <Dashboard apiStatus={apiStatus} user={user} scenarios={scenarios} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onLogout={logout} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} onOpenNonconformities={() => setView('nonconformities')} />
+  if (!user.active_organization) return <OrganizationSetupScreen user={user} onReady={setUser} onLogout={logout} />
+  if (view === 'test-cases') return <TestCasesPage key={user.active_organization.id} apiStatus={apiStatus} user={user} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onScenariosChanged={loadScenarios} onBack={() => setView('dashboard')} onOpenAudits={() => setView('audits')} onOpenNonconformities={() => setView('nonconformities')} onLogout={logout} onOrganizationChange={selectOrganization} />
+  if (view === 'audits') return <AuditPage key={user.active_organization.id} apiStatus={apiStatus} user={user} scenarios={scenarios} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onOpenNonconformities={() => setView('nonconformities')} onLogout={logout} onOrganizationChange={selectOrganization} />
+  if (view === 'nonconformities') return <NonconformitiesPage key={user.active_organization.id} apiStatus={apiStatus} user={user} scenarios={scenarios} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onBack={() => setView('dashboard')} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} onLogout={logout} onOrganizationChange={selectOrganization} />
+  return <Dashboard key={user.active_organization.id} apiStatus={apiStatus} user={user} scenarios={scenarios} selectedScenarioId={selectedScenarioId} onScenarioChange={setSelectedScenarioId} onLogout={logout} onOpenCases={() => setView('test-cases')} onOpenAudits={() => setView('audits')} onOpenNonconformities={() => setView('nonconformities')} onOrganizationChange={selectOrganization} />
 }
 
 export default App

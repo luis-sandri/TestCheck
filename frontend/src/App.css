@@ -188,12 +188,28 @@ nav {
 .sidebar-footer {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   margin-top: auto;
   padding: 18px 10px 0;
   border-top: 1px solid #31543b;
 }
+
+.organization-switcher {
+  width: 100%;
+  display: grid;
+  gap: 5px;
+  margin-bottom: 4px;
+  color: #b7cbb9;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.organization-switcher > span { color: #9ab4a0; font-size: 10px; letter-spacing: .05em; text-transform: uppercase; }
+.organization-switcher .select-trigger { min-height: 38px; border-color: #3b6848; color: #f0f8f1; background: #1d4329; font-size: 12px; }
+.organization-switcher .select-trigger svg { stroke: #b7cbb9; }
+.organization-switcher .select-menu { left: 0; right: auto; min-width: 238px; }
 
 .account-menu-trigger {
   min-width: 0;
@@ -307,6 +323,7 @@ nav {
 }
 
 .sidebar.is-collapsed .account-user-details,
+.sidebar.is-collapsed .organization-switcher,
 .sidebar.is-collapsed .logout-button {
   display: none;
 }
@@ -988,6 +1005,27 @@ td strong {
   background: rgba(255, 255, 255, 0.96);
   box-shadow: 0 24px 60px rgba(17, 48, 28, 0.12);
 }
+
+.organization-setup-card { width: min(100%, 500px); }
+
+.organization-choice {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 15px;
+  border: 1px solid #d5e5d8;
+  border-radius: 11px;
+  background: #f8fbf8;
+}
+
+.organization-choice legend { padding: 0 5px; color: #264734; font-size: 14px; font-weight: 850; }
+.organization-choice > p { margin: -2px 0 0; color: #65786a; font-size: 12px; line-height: 1.4; }
+.organization-choice-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.choice-button { min-height: 34px; padding: 0 10px; border: 1px solid #c9dbcd; border-radius: 8px; cursor: pointer; color: #385541; background: white; font: inherit; font-size: 12px; font-weight: 800; }
+.choice-button:hover:not(:disabled) { border-color: #73a981; background: #f1f8f2; }
+.choice-button.is-selected { border-color: #2c8147; color: #125a29; background: #e7f5ea; }
+.choice-button:disabled { cursor: not-allowed; opacity: .55; }
+.organization-choice .site-select { width: 100%; }
 
 .auth-brand {
   display: flex;
@@ -1858,6 +1896,16 @@ td strong {
   max-height: min(88vh, 780px);
   overflow: auto;
   padding: 26px;
+  border: 1px solid #d7e4da;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 24px 60px rgba(9, 35, 18, 0.28);
+}
+
+.case-editor-modal {
+  width: min(100%, 940px);
+  max-height: min(90vh, 820px);
+  overflow: auto;
   border: 1px solid #d7e4da;
   border-radius: 16px;
   background: white;

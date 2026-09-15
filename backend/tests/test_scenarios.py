@@ -33,7 +33,7 @@ def client() -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         registration = test_client.post(
             "/auth/register",
-            json={"full_name": "Luís Sandri", "email": "luis@example.com", "password": "senha-segura-123"},
+            json={"full_name": "Luís Sandri", "email": "luis@example.com", "password": "senha-segura-123", "organization_name": "Equipe Teste"},
         )
         assert registration.status_code == 201
         yield test_client
@@ -49,7 +49,7 @@ def import_file(client: TestClient, filename: str, content: bytes, owner_map: di
             "supervisor_email": "supervisor@example.com",
             "owner_email_map": json.dumps(owner_map or {}),
         },
-        files={"file": (filename, content, "application/octet-stream")},
+        files={"files": (filename, content, "application/octet-stream")},
     )
 
 
@@ -106,3 +106,20 @@ def test_xlsx_export_groups_repeated_steps_and_uses_folder(client: TestClient) -
     assert case["steps"] == "1. Preencher formulario\n2. Enviar formulario"
     assert case["test_data"] == "nome valido"
     assert case["expected_result"] == "1. Conta criada\n2. Confirmacao exibida"
+
+
+def test_import_accepts_multiple_files_and_keeps_case_numbers_per_folder(client: TestClient) -> None:
+    first = b"Key,Name,Folder,Owner\nA-1,Login,Regressao/Login,andre@example.com\n"
+    second = b"Key,Name,Folder,Owner\nB-1,Cadastro,Regressao/Cadastro,andre@example.com\nB-2,Consulta,Regressao/Cadastro,andre@example.com\n"
+    imported = client.post(
+        "/scenarios/import-zephyr",
+        data={"reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com", "owner_email_map": "{}"},
+        files=[("files", ("login.csv", first, "text/csv")), ("files", ("cadastro.csv", second, "text/csv"))],
+    )
+    assert imported.status_code == 201
+    assert imported.json()["imported_cases"] == 3
+    assert len(imported.json()["scenarios"]) == 2
+    cases = {case["title"]: case for case in client.get("/test-cases").json()}
+    assert cases["Login"]["code"] == "TC-001"
+    assert cases["Cadastro"]["code"] == "TC-001"
+    assert cases["Consulta"]["code"] == "TC-002"

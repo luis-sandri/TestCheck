@@ -42,11 +42,15 @@ def test_register_login_and_logout(client: TestClient) -> None:
             "full_name": "Luís Sandri",
             "email": "luis@example.com",
             "password": "senha-segura-123",
+            "organization_name": "Equipe Teste",
         },
     )
 
     assert registration.status_code == 201
     assert registration.json()["email"] == "luis@example.com"
+    assert registration.json()["active_organization"]["name"] == "Equipe Teste"
+    organization_id = registration.json()["active_organization"]["id"]
+    assert client.get("/organizations/public").json() == [{"id": organization_id, "name": "Equipe Teste"}]
     assert client.get("/auth/me").status_code == 200
 
     assert client.post("/auth/logout").status_code == 204
@@ -59,6 +63,20 @@ def test_register_login_and_logout(client: TestClient) -> None:
     assert login.status_code == 200
     assert login.json()["full_name"] == "Luís Sandri"
 
+    second_user = TestClient(app)
+    joined = second_user.post(
+        "/auth/register",
+        json={
+            "full_name": "André Murilo",
+            "email": "andre@example.com",
+            "password": "senha-segura-123",
+            "organization_id": organization_id,
+        },
+    )
+    assert joined.status_code == 201
+    assert joined.json()["active_organization"]["id"] == organization_id
+    second_user.close()
+
 
 def test_login_rejects_wrong_password(client: TestClient) -> None:
     client.post(
@@ -66,7 +84,7 @@ def test_login_rejects_wrong_password(client: TestClient) -> None:
         json={
             "full_name": "André Murilo",
             "email": "andre@example.com",
-            "password": "senha-segura-123",
+            "password": "senha-segura-123", "organization_name": "Equipe Teste",
         },
     )
 
