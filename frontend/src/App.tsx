@@ -173,6 +173,44 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
         {accountMenuOpen && <div className="account-menu"><strong>{user.full_name}</strong><span className="account-menu-label">Organização ativa</span>{user.active_organization && <SiteSelect value={user.active_organization.id} ariaLabel="Trocar organização" onChange={onOrganizationChange} options={user.organizations.map((organization) => ({ value: organization.id, label: organization.name, description: organization.role === 'OWNER' ? 'Você é proprietário' : 'Você participa' }))} />}<button type="button" onClick={onLogout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}
       </div>
     </aside>
+    <MobileNavigation active={active} user={user} onDashboard={onDashboard} onCases={onCases} onAudits={onAudits} onNonconformities={onNonconformities} onLogout={onLogout} onOrganizationChange={onOrganizationChange} />
+  </>
+}
+
+function MobileNavigation({ active, user, onDashboard, onCases, onAudits, onNonconformities, onLogout, onOrganizationChange }: {
+  active: PageName; user: CurrentUser; onDashboard: () => void; onCases: () => void; onAudits: () => void; onNonconformities: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void
+}) {
+  const [profileOpen, setProfileOpen] = useState(false)
+  const navigate = (callback: () => void) => (event: MouseEvent<HTMLAnchorElement>) => {
+    event.preventDefault()
+    setProfileOpen(false)
+    callback()
+  }
+  const changeOrganization = (organizationId: string) => {
+    setProfileOpen(false)
+    onOrganizationChange(organizationId)
+  }
+  const logout = () => {
+    setProfileOpen(false)
+    onLogout()
+  }
+
+  return <>
+    {profileOpen && <button className="mobile-account-backdrop" type="button" aria-label="Fechar opções do perfil" onClick={() => setProfileOpen(false)} />}
+    {profileOpen && <section className="mobile-account-sheet" id="mobile-account-sheet" role="dialog" aria-modal="true" aria-labelledby="mobile-account-title">
+      <div className="mobile-sheet-handle" aria-hidden="true" />
+      <div className="mobile-account-heading"><div><p>CONTA E ORGANIZAÇÃO</p><h2 id="mobile-account-title">Seu perfil</h2></div><button className="modal-close" type="button" aria-label="Fechar opções do perfil" onClick={() => setProfileOpen(false)}>×</button></div>
+      <div className="mobile-account-user"><span className="avatar">{initials(user.full_name)}</span><div><strong>{user.full_name}</strong><span>{user.email}</span></div></div>
+      {user.active_organization && <label className="mobile-organization-select"><span>Organização ativa</span><SiteSelect value={user.active_organization.id} ariaLabel="Trocar organização" onChange={changeOrganization} options={user.organizations.map((organization) => ({ value: organization.id, label: organization.name, description: organization.role === 'OWNER' ? 'Você é proprietário' : 'Você participa' }))} /></label>}
+      <button className="mobile-logout-button" type="button" onClick={logout}>Sair da conta <span aria-hidden="true">↗</span></button>
+    </section>}
+    <nav className="mobile-bottom-nav" aria-label="Navegação principal no celular">
+      <a className={`mobile-nav-item ${active === 'dashboard' ? 'active' : ''}`} href="#dashboard" onClick={navigate(onDashboard)}><NavIcon name="dashboard" /><span>Início</span></a>
+      <a className={`mobile-nav-item ${active === 'test-cases' ? 'active' : ''}`} href="#test-cases" onClick={navigate(onCases)}><NavIcon name="test-cases" /><span>Casos</span></a>
+      <a className={`mobile-nav-item ${active === 'audits' ? 'active' : ''}`} href="#audits" onClick={navigate(onAudits)}><NavIcon name="audits" /><span>Auditorias</span></a>
+      <a className={`mobile-nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><NavIcon name="nonconformities" /><span>NCs</span></a>
+      <button className={`mobile-nav-item mobile-profile-item ${profileOpen ? 'active' : ''}`} type="button" aria-expanded={profileOpen} aria-controls="mobile-account-sheet" onClick={() => setProfileOpen((current) => !current)}><span className="mobile-profile-avatar">{initials(user.full_name)}</span><span>Perfil</span></button>
+    </nav>
   </>
 }
 

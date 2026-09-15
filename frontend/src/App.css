@@ -330,6 +330,12 @@ nav {
   left: 54px;
 }
 
+.mobile-bottom-nav,
+.mobile-account-sheet,
+.mobile-account-backdrop {
+  display: none;
+}
+
 .avatar {
   width: 36px;
   height: 36px;
@@ -2072,88 +2078,233 @@ textarea::placeholder {
 @media (max-width: 760px) {
   .app-shell { grid-template-columns: 1fr; }
   .app-shell:has(.sidebar.is-collapsed) { grid-template-columns: 1fr; }
-  .mobile-menu-toggle {
+  .sidebar,
+  .sidebar-backdrop,
+  .mobile-menu-toggle { display: none !important; }
+
+  .mobile-bottom-nav {
     position: fixed;
-    top: 14px;
-    right: 16px;
-    z-index: 30;
-    width: 44px;
-    height: 44px;
+    z-index: 90;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-height: calc(68px + env(safe-area-inset-bottom));
+    padding: 7px 8px calc(7px + env(safe-area-inset-bottom));
+    border-top: 1px solid #d7e5da;
+    background: rgba(255, 255, 255, 0.97);
+    box-shadow: 0 -7px 20px rgba(17, 48, 28, 0.12);
+    backdrop-filter: blur(12px);
+  }
+
+  .mobile-nav-item {
+    min-width: 0;
+    min-height: 54px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 5px 2px;
+    border: 0;
+    border-radius: 10px;
+    color: #637267;
+    background: transparent;
+    cursor: pointer;
+    font: inherit;
+    font-size: 10px;
+    font-weight: 750;
+    line-height: 1.15;
+    text-align: center;
+    text-decoration: none;
+  }
+
+  .mobile-nav-item .nav-icon {
+    width: 21px;
+    height: 21px;
+    flex-basis: 21px;
+    stroke: currentColor;
+  }
+
+  .mobile-nav-item.active {
+    color: #0f5a2a;
+    background: #e8f4eb;
+  }
+
+  .mobile-nav-item:focus-visible,
+  .mobile-account-sheet button:focus-visible {
+    outline: 3px solid rgba(20, 83, 45, 0.3);
+    outline-offset: 2px;
+  }
+
+  .mobile-profile-item { flex-direction: column; }
+  .mobile-profile-avatar {
+    width: 22px;
+    height: 22px;
     display: grid;
     place-items: center;
-    padding: 0;
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 10px;
+    border-radius: 50%;
     color: white;
     background: var(--primary);
-    box-shadow: 0 8px 20px rgba(20, 83, 45, 0.22);
-    font-size: 22px;
-    line-height: 1;
+    font-size: 9px;
+    font-weight: 850;
   }
-  .mobile-menu-toggle.is-hidden { display: none; }
-  .mobile-menu-toggle:focus-visible { outline: 3px solid rgba(20, 83, 45, 0.32); outline-offset: 3px; }
-  .sidebar-backdrop {
+
+  .mobile-account-backdrop {
     position: fixed;
+    z-index: 95;
     inset: 0;
-    z-index: 20;
     display: block;
     width: 100%;
     height: 100%;
     padding: 0;
     border: 0;
-    background: rgba(10, 30, 16, 0.46);
+    background: rgba(11, 31, 18, 0.42);
   }
-  .sidebar {
+
+  .mobile-account-sheet {
     position: fixed;
-    z-index: 25;
-    top: 0;
+    z-index: 100;
+    right: 0;
     bottom: 0;
     left: 0;
-    width: min(292px, calc(100vw - 48px));
-    height: 100dvh;
-    padding: 24px 18px 20px;
-    transform: translateX(-105%);
-    transition: transform 180ms ease;
-    box-shadow: 12px 0 30px rgba(10, 30, 16, 0.2);
+    display: grid;
+    gap: 16px;
+    padding: 10px 20px calc(92px + env(safe-area-inset-bottom));
+    border: 1px solid #d7e5da;
+    border-bottom: 0;
+    border-radius: 20px 20px 0 0;
+    background: white;
+    box-shadow: 0 -14px 34px rgba(12, 40, 21, 0.22);
   }
-  .sidebar.is-open { transform: translateX(0); }
-  .sidebar.is-open .sidebar-toggle { display: grid; }
-  .sidebar nav { grid-template-columns: 1fr; }
-  .nav-item { min-height: 46px; padding-inline: 12px; font-size: 14px; }
-  .sidebar-footer { display: flex; }
-  .brand { padding-bottom: 22px; }
-  main { padding: 26px 16px 36px; }
-  .topbar { flex-direction: column; }
-  .topbar-actions { width: 100%; align-items: stretch; }
+
+  .mobile-sheet-handle {
+    width: 38px;
+    height: 4px;
+    margin: 0 auto -4px;
+    border-radius: 99px;
+    background: #c7d8cb;
+  }
+
+  .mobile-account-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .mobile-account-heading p,
+  .mobile-organization-select > span {
+    margin: 0 0 4px;
+    color: #55705d;
+    font-size: 10px;
+    font-weight: 850;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .mobile-account-heading h2 { margin: 0; color: #173122; font-size: 20px; }
+  .mobile-account-user { display: flex; align-items: center; gap: 11px; }
+  .mobile-account-user .avatar { width: 42px; height: 42px; font-size: 13px; }
+  .mobile-account-user div { display: grid; gap: 3px; min-width: 0; }
+  .mobile-account-user strong { color: #1d3324; font-size: 14px; }
+  .mobile-account-user span:not(.avatar) { overflow: hidden; color: #637267; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+  .mobile-organization-select { display: grid; gap: 7px; }
+  .mobile-organization-select .select-trigger { min-height: 46px; }
+  .mobile-organization-select .select-menu { z-index: 110; max-height: 200px; overflow-y: auto; }
+  .mobile-logout-button {
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 14px;
+    border: 1px solid #efbdc6;
+    border-radius: 10px;
+    color: #9b1c32;
+    background: #fff5f6;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  main { padding: 24px 16px calc(96px + env(safe-area-inset-bottom)); }
+  h1 { font-size: clamp(26px, 8vw, 32px); }
+  .subtitle { font-size: 14px; line-height: 1.5; }
+  .topbar { flex-direction: column; gap: 18px; }
+  .topbar-actions { width: 100%; align-items: stretch; gap: 10px; }
+  .topbar-actions > .primary-button,
+  .topbar-actions > .secondary-button,
   .case-topbar-actions .secondary-button { width: 100%; justify-content: center; }
   .scenario-filter { width: 100%; }
+  .scenario-filter .select-trigger { min-height: 46px; }
+  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 26px 0 16px; }
+  .metric-card { min-height: 122px; padding: 16px; border-radius: 12px; }
+  .metric-card strong { font-size: 26px; }
+  .metric-card div span { padding-right: 20px; font-size: 13px; line-height: 1.25; }
+  .metric-card small { margin-top: 11px; font-size: 11px; line-height: 1.35; }
+  .metric-icon { top: 14px; right: 14px; width: 29px; height: 29px; }
+  .panel { border-radius: 12px; }
+  .panel-header { gap: 12px; padding: 18px 16px 14px; }
+  .panel-header h2 { font-size: 17px; }
+  .panel-header p { font-size: 13px; line-height: 1.45; }
+  .case-workspace, .audit-workspace { gap: 14px; margin-top: 20px; }
+  .nonconformity-list { gap: 12px; margin-top: 22px; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .table-wrap table { min-width: 620px; }
+  th, td { padding: 13px 14px; }
+  table { font-size: 13px; }
   .audit-modal-item { grid-template-columns: 1fr; gap: 12px; }
   .audit-modal-item > .status { justify-self: start; }
-  .audit-review-modal { max-height: 90vh; padding: 20px; }
+  .audit-review-modal { max-height: min(88dvh, 780px); padding: 20px 16px; }
   .modal-heading h2 { font-size: 19px; }
   .primary-button { width: 100%; justify-content: center; }
-  .audit-case .primary-button { width: auto; }
-  .metrics { grid-template-columns: 1fr; }
-  .metric-card { min-height: 130px; }
-  th, td { padding-inline: 16px; }
-  .evidence-item { grid-template-columns: 1fr; }
+  .audit-case .primary-button { width: 100%; }
+  .case-list-content, .audit-case-list, .audit-history-list { padding-inline: 16px; }
+  .case-summary, .audit-case, .audit-summary { flex-direction: column; gap: 12px; padding-block: 16px; }
+  .case-summary-actions { width: 100%; }
+  .case-action-button { flex: 1; min-height: 42px; justify-content: center; }
+  .reviewable-audit .primary-button { margin-top: 4px; }
+  .evidence-item { grid-template-columns: 1fr; gap: 8px; }
+  .evidence-form > div { align-items: stretch; flex-direction: column; }
+  .review-actions { align-items: stretch; flex-direction: column; }
+  .review-actions .review-button { width: 100%; min-height: 42px; justify-content: center; }
+  .nc-badges { flex-wrap: wrap; }
+  .nonconformity-card { padding: 18px 16px; }
+  .nc-header { gap: 12px; }
+  .owner-mapping { margin: 16px; padding: 14px; }
+  .owner-mapping-fields { grid-template-columns: 1fr; }
+  .scenario-list-content { padding: 0 16px 16px; }
+  .action-list { padding-inline: 16px; }
+  .action-list li { grid-template-columns: 8px minmax(0, 1fr) auto; gap: 9px; }
+  .action-list b { min-width: 0; }
+  .action-open-button { grid-column: 2 / -1; width: 100%; margin-top: -3px; }
   .compact-fields, .review-item, .deadline-grid { grid-template-columns: 1fr; }
   .empty-state-panel { align-items: stretch; flex-direction: column; }
   .empty-state-panel .secondary-button { width: 100%; }
-  .toast-notification { right: 16px; bottom: 16px; }
+  .modal-backdrop { align-items: end; padding: 0; }
+  .confirmation-modal,
+  .audit-review-modal,
+  .case-editor-modal { width: 100%; max-height: min(88dvh, 820px); border-bottom: 0; border-radius: 20px 20px 0 0; }
+  .confirmation-modal { padding: 22px 20px calc(22px + env(safe-area-inset-bottom)); }
+  .case-editor-modal .panel-header { padding: 20px 18px 14px; }
+  .case-editor-modal .form-fields { padding: 2px 18px 20px; }
+  .form-actions, .modal-actions { align-items: stretch; flex-direction: column-reverse; gap: 10px; padding: 14px 18px calc(14px + env(safe-area-inset-bottom)); }
+  .modal-actions { margin-top: 18px; padding-inline: 0; padding-bottom: 0; }
+  .form-actions > button, .modal-actions > button { width: 100%; justify-content: center; }
+  .toast-notification { right: 12px; bottom: calc(80px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
 }
 
 @media (max-width: 580px) {
-  .sidebar { padding: 16px; }
-  .brand { padding: 0 4px 14px; }
-  .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 26px; }
-  .metric-card { min-height: 122px; padding: 16px; }
-  .metric-card strong { font-size: 24px; }
-  .metric-card > div { margin-top: 13px; }
-  .metric-card small { margin-top: 11px; }
-  .metric-icon { top: 14px; right: 14px; }
+  .mobile-bottom-nav { padding-inline: 4px; }
+  .mobile-nav-item { font-size: 9px; }
+  .mobile-account-sheet { padding-inline: 16px; }
+  .audit-modal-item { padding: 13px; }
 }
 
 @media (max-width: 460px) {
-  .mobile-menu-toggle { right: 12px; }
+  main { padding-inline: 12px; }
+  .panel-header { padding-inline: 14px; }
+  .case-list-content, .audit-case-list, .audit-history-list, .scenario-list-content { padding-inline: 14px; }
+  .nonconformity-card { padding-inline: 14px; }
 }
