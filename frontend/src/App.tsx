@@ -148,7 +148,6 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
     return savedState === null ? window.matchMedia('(min-width: 761px)').matches : savedState === 'true'
   })
   const [accountMenuOpen, setAccountMenuOpen] = useState(false)
-  const roleLabel = user.role === 'AUDITOR' ? 'Auditor' : user.role === 'ADMIN' ? 'Administrador' : 'Responsável'
   useEffect(() => { window.sessionStorage.setItem('testcheck-sidebar-open', String(isOpen)) }, [isOpen])
   const navigate = (callback: () => void) => (event: MouseEvent<HTMLAnchorElement>) => {
     event.preventDefault()
@@ -170,10 +169,8 @@ function Sidebar({ active, user, onDashboard, onCases, onAudits, onNonconformiti
         <a className={`nav-item ${active === 'nonconformities' ? 'active' : ''}`} href="#nonconformities" onClick={navigate(onNonconformities)}><NavIcon name="nonconformities" /> Não conformidades</a>
       </nav>
       <div className="sidebar-footer">
-        {user.active_organization && <label className="organization-switcher"><span>Organização</span><SiteSelect value={user.active_organization.id} ariaLabel="Alternar organização" onChange={onOrganizationChange} options={user.organizations.map((organization) => ({ value: organization.id, label: organization.name, description: organization.role === 'OWNER' ? 'Você é proprietário' : 'Você participa' }))} /></label>}
-        <button className="account-menu-trigger" type="button" aria-expanded={accountMenuOpen} aria-label="Abrir opções da conta" onClick={() => setAccountMenuOpen((current) => !current)}><span className="avatar">{initials(user.full_name)}</span><span className="account-user-details"><strong>{user.full_name}</strong><span>{roleLabel}</span></span></button>
-        <button className="logout-button" onClick={onLogout} type="button">Sair</button>
-        {accountMenuOpen && <div className="account-menu"><strong>{user.full_name}</strong><span>{roleLabel}</span><button type="button" onClick={onLogout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}
+        <button className="account-menu-trigger" type="button" aria-expanded={accountMenuOpen} aria-label="Abrir opções da conta e organização" onClick={() => setAccountMenuOpen((current) => !current)}><span className="avatar">{initials(user.full_name)}</span><span className="account-user-details"><strong>{user.full_name}</strong><span>{user.active_organization?.name || 'Sem organização'}</span></span><span className="account-menu-chevron" aria-hidden="true">⌄</span></button>
+        {accountMenuOpen && <div className="account-menu"><strong>{user.full_name}</strong><span className="account-menu-label">Organização ativa</span>{user.active_organization && <SiteSelect value={user.active_organization.id} ariaLabel="Trocar organização" onChange={onOrganizationChange} options={user.organizations.map((organization) => ({ value: organization.id, label: organization.name, description: organization.role === 'OWNER' ? 'Você é proprietário' : 'Você participa' }))} />}<button type="button" onClick={onLogout}>Sair da conta <span aria-hidden="true">↗</span></button></div>}
       </div>
     </aside>
   </>
