@@ -249,11 +249,12 @@ nav {
   box-shadow: 0 16px 34px rgba(0, 0, 0, 0.28);
 }
 
-.account-menu strong { color: white; font-size: 13px; }
+.account-menu > strong { color: white; font-size: 13px; }
 .account-menu-label { color: #a8c2ae; font-size: 10px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
 .account-menu .select-trigger { min-height: 39px; border-color: #3b6848; color: #f0f8f1; background: #1d4329; font-size: 12px; }
 .account-menu .select-trigger svg { stroke: #b7cbb9; }
 .account-menu .select-menu { left: 0; right: auto; min-width: 238px; }
+.account-menu .select-option strong { color: #176b3a; }
 .account-menu button {
   display: flex;
   justify-content: space-between;
