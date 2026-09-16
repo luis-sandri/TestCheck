@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from collections.abc import Generator
 from io import BytesIO
-import json
 
 from fastapi.testclient import TestClient
 from openpyxl import Workbook
@@ -41,19 +40,19 @@ def client() -> Generator[TestClient, None, None]:
     Base.metadata.drop_all(test_engine)
 
 
-def import_file(client: TestClient, filename: str, content: bytes, owner_map: dict[str, str] | None = None):
+def import_file(client: TestClient, filename: str, content: bytes, responsible_email: str = "responsavel@example.com"):
     return client.post(
         "/scenarios/import-zephyr",
         data={
+            "responsible_email": responsible_email,
             "reviewer_email": "revisor@example.com",
             "supervisor_email": "supervisor@example.com",
-            "owner_email_map": json.dumps(owner_map or {}),
         },
         files={"files": (filename, content, "application/octet-stream")},
     )
 
 
-def test_xml_export_requests_owner_mapping_then_imports(client: TestClient) -> None:
+def test_xml_export_uses_responsible_informed_by_user(client: TestClient) -> None:
     xml = b"""<?xml version=\"1.0\" encoding=\"UTF-8\"?>
     <project><folders/><testCases><testCase key=\"SCRUM-T1\">
       <name>Login valido</name><objective>Validar acesso</objective><precondition>Usuario cadastrado</precondition>
@@ -61,24 +60,13 @@ def test_xml_export_requests_owner_mapping_then_imports(client: TestClient) -> N
       <testScript type=\"steps\"><steps><step index=\"0\"><description>Informar credenciais</description><testData>usuario valido</testData><expectedResult>Acesso liberado</expectedResult></step></steps></testScript>
     </testCase></testCases></project>"""
 
-    mapping_needed = import_file(client, "atm-exporter.xml", xml)
-    assert mapping_needed.status_code == 422
-    detail = mapping_needed.json()["detail"]
-    assert detail["code"] == "OWNER_EMAIL_REQUIRED"
-    assert detail["owners"][0]["identifier"] == "712020:13f64522-512c-4810-8786-406a05679ff7"
-
-    imported = import_file(
-        client,
-        "atm-exporter.xml",
-        xml,
-        {"712020:13f64522-512c-4810-8786-406a05679ff7": "andre@example.com"},
-    )
+    imported = import_file(client, "atm-exporter.xml", xml, "marcelo@example.com")
     assert imported.status_code == 201
     assert imported.json()["imported_cases"] == 1
     case = client.get("/test-cases").json()[0]
     assert case["title"] == "Login valido"
     assert case["zephyr_key"] == "SCRUM-T1"
-    assert case["responsible_email"] == "andre@example.com"
+    assert case["responsible_email"] == "marcelo@example.com"
     assert case["description"] == "Validar acesso"
     assert case["steps"] == "Informar credenciais"
     assert case["expected_result"] == "Acesso liberado"
@@ -97,23 +85,23 @@ def test_xlsx_export_groups_repeated_steps_and_uses_folder(client: TestClient) -
     output = BytesIO()
     workbook.save(output)
 
-    imported = import_file(client, "atm-exporter.xlsx", output.getvalue())
+    imported = import_file(client, "atm-exporter.xlsx", output.getvalue(), "matheus@example.com")
     assert imported.status_code == 201
     assert imported.json()["imported_cases"] == 1
     assert imported.json()["scenarios"][0]["zephyr_folder"] == "Regressao/Conta"
     case = client.get("/test-cases").json()[0]
-    assert case["responsible_email"] == "andre@example.com"
+    assert case["responsible_email"] == "matheus@example.com"
     assert case["steps"] == "1. Preencher formulario\n2. Enviar formulario"
     assert case["test_data"] == "nome valido"
     assert case["expected_result"] == "1. Conta criada\n2. Confirmacao exibida"
 
 
 def test_import_accepts_multiple_files_and_keeps_case_numbers_per_folder(client: TestClient) -> None:
-    first = b"Key,Name,Folder,Owner\nA-1,Login,Regressao/Login,andre@example.com\n"
-    second = b"Key,Name,Folder,Owner\nB-1,Cadastro,Regressao/Cadastro,andre@example.com\nB-2,Consulta,Regressao/Cadastro,andre@example.com\n"
+    first = b"Key,Name,Folder,Owner\nA-1,Login,Regressao/Login,zephyr-user-1\n"
+    second = b"Key,Name,Folder,Owner\nB-1,Cadastro,Regressao/Cadastro,andre@example.com\nB-2,Consulta,Regressao/Cadastro,zephyr-user-2\n"
     imported = client.post(
         "/scenarios/import-zephyr",
-        data={"reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com", "owner_email_map": "{}"},
+        data={"responsible_email": "gustavo@example.com", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"},
         files=[("files", ("login.csv", first, "text/csv")), ("files", ("cadastro.csv", second, "text/csv"))],
     )
     assert imported.status_code == 201
@@ -123,6 +111,7 @@ def test_import_accepts_multiple_files_and_keeps_case_numbers_per_folder(client:
     assert cases["Login"]["code"] == "TC-001"
     assert cases["Cadastro"]["code"] == "TC-001"
     assert cases["Consulta"]["code"] == "TC-002"
+    assert {case["responsible_email"] for case in cases.values()} == {"gustavo@example.com"}
 
 
 def test_bulk_import_and_manual_edit_keep_numbering_independent_per_scenario(client: TestClient) -> None:
@@ -130,9 +119,9 @@ def test_bulk_import_and_manual_edit_keep_numbering_independent_per_scenario(cli
     imported = client.post(
         "/scenarios/import-zephyr",
         data={
+            "responsible_email": "responsavel@example.com",
             "reviewer_email": "revisor@example.com",
             "supervisor_email": "supervisor@example.com",
-            "owner_email_map": "{}",
         },
         files=[
             (

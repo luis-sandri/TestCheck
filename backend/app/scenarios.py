@@ -3,10 +3,8 @@
 from __future__ import annotations
 
 import csv
-import json
 import re
 import xml.etree.ElementTree as ET
-from collections import defaultdict
 from html import unescape
 from io import BytesIO, StringIO
 from pathlib import Path
@@ -53,15 +51,10 @@ FIELD_ALIASES = {
 }
 
 EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
-MISSING_OWNER_KEY = "__zephyr_owner_missing__"
 
 
 def normalize(value: str) -> str:
     return " ".join(str(value).strip().casefold().replace("_", " ").split())
-
-
-def normalize_owner(value: str) -> str:
-    return unescape(str(value)).strip().casefold()
 
 
 def clean_email(value: str, label: str) -> str:
@@ -69,10 +62,6 @@ def clean_email(value: str, label: str) -> str:
     if not EMAIL_PATTERN.fullmatch(email):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Informe um e-mail válido para {label}.")
     return email
-
-
-def is_email(value: str) -> bool:
-    return bool(EMAIL_PATTERN.fullmatch(unescape(str(value)).strip()))
 
 
 def value_from_row(row: dict[str, str], field: str) -> str:
@@ -216,60 +205,6 @@ def consolidate_cases(rows: list[dict[str, str]]) -> list[dict[str, str | list[s
     return cases
 
 
-def read_owner_mapping(raw_mapping: str) -> dict[str, str]:
-    try:
-        parsed = json.loads(raw_mapping or "{}")
-    except json.JSONDecodeError as error:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Os responsáveis informados estão em um formato inválido.") from error
-    if not isinstance(parsed, dict):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Os responsáveis informados estão em um formato inválido.")
-    return {
-        normalize_owner(identifier): clean_email(str(email), f"responsável associado a {identifier}")
-        for identifier, email in parsed.items()
-        if str(email).strip()
-    }
-
-
-def resolve_responsibles(
-    cases: list[dict[str, str | list[str]]], owner_mapping: dict[str, str], supervisor_email: str
-) -> list[tuple[dict[str, str | list[str]], str]]:
-    unresolved: dict[str, list[str]] = defaultdict(list)
-    resolved: list[tuple[dict[str, str | list[str]], str]] = []
-    for case in cases:
-        owner = str(case["owner"])
-        if is_email(owner):
-            responsible_email = clean_email(owner, f"responsável do caso {case['title']}")
-        else:
-            owner_key = normalize_owner(owner) if owner.strip() else MISSING_OWNER_KEY
-            responsible_email = owner_mapping.get(owner_key, "")
-            if not responsible_email:
-                display_key = owner.strip() or "Sem Owner informado pelo Zephyr"
-                reference = f"{case['source_key'] or 'Sem chave'} — {case['title']}"
-                if reference not in unresolved[display_key]:
-                    unresolved[display_key].append(reference)
-                continue
-        if responsible_email == supervisor_email:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"O supervisor não pode ser o responsável pelo caso {case['title']}.",
-            )
-        resolved.append((case, responsible_email))
-
-    if unresolved:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "OWNER_EMAIL_REQUIRED",
-                "message": "O Zephyr informou identificadores de Owner, não e-mails. Associe cada Owner a um responsável antes de importar.",
-                "owners": [
-                    {"identifier": identifier, "test_cases": test_cases[:3]}
-                    for identifier, test_cases in unresolved.items()
-                ],
-            },
-        )
-    return resolved
-
-
 def serialize_scenario(scenario: Scenario) -> ScenarioOutput:
     return ScenarioOutput(
         id=scenario.id,
@@ -300,29 +235,30 @@ def list_scenarios(
 @router.post("/import-zephyr", response_model=ZephyrImportOutput, status_code=status.HTTP_201_CREATED)
 async def import_zephyr_file(
     files: list[UploadFile] = File(...),
+    responsible_email: str = Form(...),
     reviewer_email: str = Form(...),
     supervisor_email: str = Form(...),
-    owner_email_map: str = Form("{}"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
     organization: Organization = Depends(get_current_organization),
 ) -> ZephyrImportOutput:
     if not files or any(not file.filename for file in files):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione ao menos um arquivo exportado pelo Zephyr.")
+    responsible_email = clean_email(responsible_email, "responsável dos casos importados")
     reviewer_email = clean_email(reviewer_email, "revisor")
     supervisor_email = clean_email(supervisor_email, "supervisor")
     if supervisor_email == current_user.email:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O supervisor deve ser diferente de quem importou o cenário.")
+    if supervisor_email == responsible_email:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="O supervisor deve ser diferente do responsável pelos casos importados.")
 
     cases: list[dict[str, str | list[str]]] = []
     for file in files:
         cases.extend(consolidate_cases(parse_zephyr_file(file.filename or "", await file.read())))
     if not cases:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Nenhum caso com título foi encontrado no arquivo.")
-    resolved_cases = resolve_responsibles(cases, read_owner_mapping(owner_email_map), supervisor_email)
-
     imported_scenarios: dict[str, Scenario] = {}
-    for case, responsible_email in resolved_cases:
+    for case in cases:
         folder = str(case["folder"]) or "Casos sem folder"
         scenario = imported_scenarios.get(folder)
         if scenario is None:
@@ -373,6 +309,6 @@ async def import_zephyr_file(
         .where(Scenario.id.in_([scenario.id for scenario in imported_scenarios.values()]))
     ).all()
     return ZephyrImportOutput(
-        imported_cases=len(resolved_cases),
+        imported_cases=len(cases),
         scenarios=[serialize_scenario(scenario) for scenario in persisted_scenarios],
     )
