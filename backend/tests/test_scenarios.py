@@ -96,6 +96,24 @@ def test_xlsx_export_groups_repeated_steps_and_uses_folder(client: TestClient) -
     assert case["expected_result"] == "1. Conta criada\n2. Confirmacao exibida"
 
 
+def test_xml_without_owner_uses_one_responsible_for_every_case(client: TestClient) -> None:
+    """Regressão do export XML atual do Zephyr: Owner pode não existir no arquivo."""
+    xml = b"""<?xml version="1.0" encoding="UTF-8"?>
+    <project><folders><folder fullPath="Fluxo de Login" index="0"/></folders><testCases>
+      <testCase key="SCRUM-T24"><folder>Fluxo de Login</folder><name>Login valido</name><testScript type="steps"><steps><step index="0"><description>Acessar login</description><testData>Usuario valido</testData><expectedResult>Acesso liberado</expectedResult></step></steps></testScript></testCase>
+      <testCase key="SCRUM-T25"><folder>Fluxo de Login</folder><name>Senha incorreta</name><testScript type="steps"><steps><step index="0"><description>Informar senha incorreta</description><expectedResult>Erro exibido</expectedResult></step></steps></testScript></testCase>
+      <testCase key="SCRUM-T26"><folder>Fluxo de Login</folder><name>E-mail obrigatorio</name></testCase>
+      <testCase key="SCRUM-T27"><folder>Fluxo de Login</folder><name>Campos vazios</name></testCase>
+    </testCases></project>"""
+
+    imported = import_file(client, "atm-exporter(3).xml", xml, "andre.gomes@testcheck.com")
+    assert imported.status_code == 201
+    assert imported.json()["imported_cases"] == 4
+    cases = client.get("/test-cases").json()
+    assert {case["responsible_email"] for case in cases} == {"andre.gomes@testcheck.com"}
+    assert {case["scenario_name"] for case in cases} == {"Fluxo de Login"}
+
+
 def test_import_accepts_multiple_files_and_keeps_case_numbers_per_folder(client: TestClient) -> None:
     first = b"Key,Name,Folder,Owner\nA-1,Login,Regressao/Login,zephyr-user-1\n"
     second = b"Key,Name,Folder,Owner\nB-1,Cadastro,Regressao/Cadastro,andre@example.com\nB-2,Consulta,Regressao/Cadastro,zephyr-user-2\n"
