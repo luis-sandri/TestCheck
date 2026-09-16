@@ -179,6 +179,7 @@ class AuditOutput(BaseModel):
     auditor_name: str
     status: AuditStatus
     adherence_percentage: int | None
+    original_adherence_percentage: int | None
     nonconformity_count: int
     items: list[AuditItemOutput]
     created_at: datetime

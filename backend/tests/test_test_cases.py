@@ -97,6 +97,7 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     assert review.status_code == 200
     assert review.json()["status"] == "COMPLETED"
     assert review.json()["adherence_percentage"] == 33
+    assert review.json()["original_adherence_percentage"] == 33
     assert review.json()["nonconformity_count"] == 4
     assert len(client.get("/audits").json()) == 1
 
@@ -115,6 +116,10 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     )
     assert reviewed.status_code == 200
     assert reviewed.json()["status"] == "RESOLVED"
+
+    refreshed_audit = client.get("/audits").json()[0]
+    assert refreshed_audit["adherence_percentage"] == 50
+    assert refreshed_audit["original_adherence_percentage"] == 33
 
 
 def test_numbering_and_data_are_scoped_by_scenario_and_organization(client: TestClient) -> None:

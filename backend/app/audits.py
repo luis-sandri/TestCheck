@@ -19,6 +19,7 @@ from .models import (
     Nonconformity,
     NonconformityHistory,
     NonconformitySeverity,
+    NonconformityStatus,
     Notification,
     NotificationType,
     Organization,
@@ -48,6 +49,7 @@ def audit_query():
         selectinload(Audit.test_case).selectinload(TestCase.scenario),
         selectinload(Audit.auditor),
         selectinload(Audit.items),
+        selectinload(Audit.items).selectinload(AuditItem.nonconformity),
     )
 
 
@@ -93,6 +95,27 @@ def serialize_audit(audit: Audit, user: User) -> AuditOutput:
         value = getattr(audit.test_case, CHECKLIST_FIELD_BY_CODE[checklist_code], None)
         return value.strip() if isinstance(value, str) and value.strip() else None
 
+    original_adherence = audit.adherence_percentage
+    current_adherence = original_adherence
+    if audit.status == AuditStatus.COMPLETED:
+        applicable_items = [
+            item for item in audit.items if item.final_result != ChecklistResult.NOT_APPLICABLE
+        ]
+        current_conforming_items = sum(
+            item.final_result == ChecklistResult.CONFORMING
+            or (
+                item.final_result == ChecklistResult.NONCONFORMING
+                and item.nonconformity is not None
+                and item.nonconformity.status == NonconformityStatus.RESOLVED
+            )
+            for item in applicable_items
+        )
+        current_adherence = (
+            round((current_conforming_items / len(applicable_items)) * 100)
+            if applicable_items
+            else 100
+        )
+
     return AuditOutput(
         id=audit.id,
         test_case_id=audit.test_case_id,
@@ -102,7 +125,8 @@ def serialize_audit(audit: Audit, user: User) -> AuditOutput:
         scenario_name=audit.test_case.scenario.name if audit.test_case.scenario else None,
         auditor_name=audit.auditor.full_name,
         status=audit.status,
-        adherence_percentage=audit.adherence_percentage,
+        adherence_percentage=current_adherence,
+        original_adherence_percentage=original_adherence,
         nonconformity_count=sum(item.final_result == ChecklistResult.NONCONFORMING for item in audit.items),
         items=[
             AuditItemOutput(
