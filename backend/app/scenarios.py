@@ -235,7 +235,7 @@ def list_scenarios(
 @router.post("/import-zephyr", response_model=ZephyrImportOutput, status_code=status.HTTP_201_CREATED)
 async def import_zephyr_file(
     files: list[UploadFile] = File(...),
-    responsible_email: str = Form(...),
+    responsible_email: str = Form(""),
     reviewer_email: str = Form(...),
     supervisor_email: str = Form(...),
     db: Session = Depends(get_db),
@@ -244,7 +244,10 @@ async def import_zephyr_file(
 ) -> ZephyrImportOutput:
     if not files or any(not file.filename for file in files):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Selecione ao menos um arquivo exportado pelo Zephyr.")
-    responsible_email = clean_email(responsible_email, "responsável dos casos importados")
+    # Compatibilidade com abas ainda abertas antes da inclusão do campo no formulário.
+    # A interface atual sempre envia o responsável escolhido; na versão anterior,
+    # o autor da importação assume essa responsabilidade.
+    responsible_email = clean_email(responsible_email or current_user.email, "responsável dos casos importados")
     reviewer_email = clean_email(reviewer_email, "revisor")
     supervisor_email = clean_email(supervisor_email, "supervisor")
     if supervisor_email == current_user.email:

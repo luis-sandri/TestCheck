@@ -114,6 +114,18 @@ def test_xml_without_owner_uses_one_responsible_for_every_case(client: TestClien
     assert {case["scenario_name"] for case in cases} == {"Fluxo de Login"}
 
 
+def test_import_from_an_open_old_interface_uses_the_importer_as_responsible(client: TestClient) -> None:
+    """Evita 422 enquanto uma aba anterior ainda não envia responsible_email."""
+    response = client.post(
+        "/scenarios/import-zephyr",
+        data={"reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"},
+        files={"files": ("legado.csv", b"Key,Name,Folder\nLEG-1,Caso legado,Legado\n", "text/csv")},
+    )
+
+    assert response.status_code == 201
+    assert client.get("/test-cases").json()[0]["responsible_email"] == "luis@example.com"
+
+
 def test_import_accepts_multiple_files_and_keeps_case_numbers_per_folder(client: TestClient) -> None:
     first = b"Key,Name,Folder,Owner\nA-1,Login,Regressao/Login,zephyr-user-1\n"
     second = b"Key,Name,Folder,Owner\nB-1,Cadastro,Regressao/Cadastro,andre@example.com\nB-2,Consulta,Regressao/Cadastro,zephyr-user-2\n"
