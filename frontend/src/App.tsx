@@ -5,6 +5,8 @@ import './App.css'
 type ApiStatus = 'checking' | 'online' | 'offline'
 type AuthMode = 'login' | 'register'
 type PageName = 'dashboard' | 'test-cases' | 'audits' | 'nonconformities'
+type AuditStatusFilter = 'ALL' | 'PENDING' | 'WAITING_REVIEW' | 'COMPLETED' | 'MISSING_ROLES'
+type NonconformityFilter = 'ALL' | 'OPEN' | 'IN_CORRECTION' | 'WAITING_VALIDATION' | 'ESCALATED' | 'RESOLVED'
 type OrganizationData = { id: string; name: string; role: 'OWNER' | 'MEMBER' }
 type PublicOrganizationData = { id: string; name: string }
 type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN'; active_organization: OrganizationData | null; organizations: OrganizationData[] }
@@ -455,6 +457,8 @@ function AuditReviewModal({ audit, reviewItems, setReviewItems, busy, onClose, o
 function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onBack, onOpenCases, onOpenNonconformities, onLogout, onOrganizationChange }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onBack: () => void; onOpenCases: () => void; onOpenNonconformities: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void }) {
   const [cases, setCases] = useState<TestCaseData[]>([])
   const [audits, setAudits] = useState<AuditData[]>([])
+  const [selectedCaseId, setSelectedCaseId] = useState('')
+  const [statusFilter, setStatusFilter] = useState<AuditStatusFilter>('ALL')
   const [loading, setLoading] = useState(true)
   const [runningId, setRunningId] = useState<string | null>(null)
   const [reviewAudit, setReviewAudit] = useState<AuditData | null>(null)
@@ -501,15 +505,25 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível finalizar a revisão.') } finally { setRunningId(null) }
   }
 
-  const visibleCases = selectedScenarioId ? cases.filter((testCase) => testCase.scenario_id === selectedScenarioId) : cases
   const latestAuditByCase = new Map<string, AuditData>()
   for (const audit of audits) if (!latestAuditByCase.has(audit.test_case_id)) latestAuditByCase.set(audit.test_case_id, audit)
+  const casesInScenario = selectedScenarioId ? cases.filter((testCase) => testCase.scenario_id === selectedScenarioId) : cases
+  const visibleCases = casesInScenario.filter((testCase) => {
+    if (selectedCaseId && testCase.id !== selectedCaseId) return false
+    const audit = latestAuditByCase.get(testCase.id)
+    const workflowReady = Boolean(testCase.reviewer_email && testCase.supervisor_email)
+    if (statusFilter === 'MISSING_ROLES') return !workflowReady
+    if (statusFilter === 'PENDING') return workflowReady && !audit
+    if (statusFilter === 'WAITING_REVIEW') return audit?.status === 'DRAFT'
+    if (statusFilter === 'COMPLETED') return audit?.status === 'COMPLETED'
+    return true
+  })
 
   return <div className="app-shell"><Sidebar active="audits" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={() => undefined} onNonconformities={onOpenNonconformities} onLogout={onLogout} onOrganizationChange={onOrganizationChange} /><main>
-    <header className="topbar"><div><p className="eyebrow">AUDITORIA ASSISTIDA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Execute o caso, revise as sugestões e confirme o resultado final em uma única fila.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
+    <header className="topbar"><div><p className="eyebrow">AUDITORIA ASSISTIDA</p><h1>Auditorias de casos de teste</h1><p className="subtitle">Execute o caso, revise as sugestões e confirme o resultado final em uma única fila.</p></div><div className="topbar-actions audit-filter-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={(value) => { setSelectedCaseId(''); onScenarioChange(value) }} /><label className="scenario-filter"><span>Filtrar caso</span><SiteSelect value={selectedCaseId} onChange={setSelectedCaseId} ariaLabel="Filtrar por caso de teste" options={[{ value: '', label: 'Todos os casos', description: 'Exibe todos os casos no cenário atual.' }, ...casesInScenario.map((testCase) => ({ value: testCase.id, label: `${testCase.code} · ${testCase.title}`, description: testCase.scenario_name || 'Caso geral' }))]} /></label><label className="scenario-filter"><span>Filtrar status</span><SiteSelect value={statusFilter} onChange={(value) => setStatusFilter(value as AuditStatusFilter)} ariaLabel="Filtrar por status da auditoria" options={[{ value: 'ALL', label: 'Todos os status', description: 'Exibe toda a fila.' }, { value: 'PENDING', label: 'Pendentes', description: 'Prontos para executar.' }, { value: 'WAITING_REVIEW', label: 'Aguardando revisão', description: 'Aguardam decisão do revisor.' }, { value: 'COMPLETED', label: 'Concluídas', description: 'Revisão finalizada.' }, { value: 'MISSING_ROLES', label: 'Configurar papéis', description: 'Faltam responsável, revisor ou supervisor.' }]} /></label></div></header>
     <section className="panel audit-table-panel"><div className="panel-header"><div><h2>Fila de auditorias</h2><p>Use a ação indicada em cada linha para avançar o caso para a próxima etapa.</p></div></div>
       <div className="table-wrap"><table className="audit-table"><thead><tr><th>Caso de teste</th><th>Cenário</th><th>Status</th><th>Resultado</th><th>Ação</th></tr></thead><tbody>
-        {loading ? <tr><td colSpan={5}><p className="empty-state">Carregando casos e auditorias…</p></td></tr> : visibleCases.length === 0 ? <tr><td colSpan={5}><p className="empty-state">{selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Cadastre ou importe um caso de teste para iniciar.'}</p></td></tr> : visibleCases.map((testCase) => {
+        {loading ? <tr><td colSpan={5}><p className="empty-state">Carregando casos e auditorias…</p></td></tr> : visibleCases.length === 0 ? <tr><td colSpan={5}><p className="empty-state">{selectedCaseId || statusFilter !== 'ALL' ? 'Nenhum caso corresponde aos filtros selecionados.' : selectedScenarioId ? 'Nenhum caso pertence ao cenário selecionado.' : 'Cadastre ou importe um caso de teste para iniciar.'}</p></td></tr> : visibleCases.map((testCase) => {
           const audit = latestAuditByCase.get(testCase.id)
           const workflowReady = Boolean(testCase.reviewer_email && testCase.supervisor_email)
           const waitingReview = audit?.status === 'DRAFT'
@@ -526,6 +540,7 @@ function AuditPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioC
 }
 function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, onScenarioChange, onBack, onOpenCases, onOpenAudits, onLogout, onOrganizationChange }: { apiStatus: ApiStatus; user: CurrentUser; scenarios: ScenarioData[]; selectedScenarioId: string; onScenarioChange: (value: string) => void; onBack: () => void; onOpenCases: () => void; onOpenAudits: () => void; onLogout: () => void; onOrganizationChange: (organizationId: string) => void }) {
   const [nonconformities, setNonconformities] = useState<NonconformityData[]>([])
+  const [lifecycleFilter, setLifecycleFilter] = useState<NonconformityFilter>('ALL')
   const [drafts, setDrafts] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState<string | null>(null)
@@ -609,12 +624,17 @@ function NonconformitiesPage({ apiStatus, user, scenarios, selectedScenarioId, o
     MEDIUM: 'SLA: responsável 5 dias úteis · revisor 2 dias úteis · supervisor 2 dias úteis',
     LOW: 'SLA: responsável 10 dias úteis · revisor 3 dias úteis · supervisor 3 dias úteis',
   }
-  const visibleNonconformities = selectedScenarioId ? nonconformities.filter((nonconformity) => nonconformity.scenario_id === selectedScenarioId) : nonconformities
+  const visibleNonconformities = nonconformities.filter((nonconformity) => {
+    if (selectedScenarioId && nonconformity.scenario_id !== selectedScenarioId) return false
+    return lifecycleFilter === 'ALL' || nonconformity.status === lifecycleFilter
+  })
+  const lifecycleCount = (status: NonconformityFilter) => nonconformities.filter((nonconformity) => (!selectedScenarioId || nonconformity.scenario_id === selectedScenarioId) && (status === 'ALL' || nonconformity.status === status)).length
 
   return <div className="app-shell"><Sidebar active="nonconformities" user={user} onDashboard={onBack} onCases={onOpenCases} onAudits={onOpenAudits} onNonconformities={() => undefined} onLogout={onLogout} onOrganizationChange={onOrganizationChange} /><main>
     <header className="topbar"><div><p className="eyebrow">CICLO DE VIDA E ESCALONAMENTO</p><h1>Não conformidades</h1><p className="subtitle">Acompanhe cada NC desde a geração, passando por correção ou contestação, até a decisão final.</p></div><div className="topbar-actions"><ScenarioFilter scenarios={scenarios} value={selectedScenarioId} onChange={onScenarioChange} /></div></header>
     <section className="nonconformity-list">
-      {!loading && visibleNonconformities.length === 0 && <section className="panel empty-state-panel"><div><h2>{selectedScenarioId ? 'Nenhuma NC neste cenário' : 'Nenhuma não conformidade atribuída'}</h2><p className="empty-state">{selectedScenarioId ? 'Altere ou limpe o filtro para consultar os demais cenários.' : 'Quando uma auditoria confirmar um desvio, a não conformidade aparecerá aqui.'}</p></div><button className="secondary-button" type="button" onClick={selectedScenarioId ? () => onScenarioChange('') : onOpenAudits}>{selectedScenarioId ? 'Limpar filtro' : 'Abrir auditorias'}</button></section>}
+      <section className="lifecycle-filter-bar" aria-label="Filtros por etapa da não conformidade"><p>Filtrar por etapa</p><div className="lifecycle-filter-actions">{([{ value: 'ALL', label: 'Todas' }, { value: 'OPEN', label: 'Abertas' }, { value: 'IN_CORRECTION', label: 'Para correção' }, { value: 'WAITING_VALIDATION', label: 'Para revisão' }, { value: 'ESCALATED', label: 'Escaladas' }, { value: 'RESOLVED', label: 'Resolvidas' }] as { value: NonconformityFilter; label: string }[]).map((filter) => <button className={`lifecycle-filter-button ${lifecycleFilter === filter.value ? 'active' : ''}`} type="button" aria-pressed={lifecycleFilter === filter.value} key={filter.value} onClick={() => setLifecycleFilter(filter.value)}>{filter.label}<span>{lifecycleCount(filter.value)}</span></button>)}</div></section>
+      {!loading && visibleNonconformities.length === 0 && <section className="panel empty-state-panel"><div><h2>{lifecycleFilter !== 'ALL' ? 'Nenhuma NC nesta etapa' : selectedScenarioId ? 'Nenhuma NC neste cenário' : 'Nenhuma não conformidade atribuída'}</h2><p className="empty-state">{lifecycleFilter !== 'ALL' ? 'Altere a etapa selecionada ou escolha “Todas” para consultar as demais NCs.' : selectedScenarioId ? 'Altere ou limpe o filtro para consultar os demais cenários.' : 'Quando uma auditoria confirmar um desvio, a não conformidade aparecerá aqui.'}</p></div><button className="secondary-button" type="button" onClick={lifecycleFilter !== 'ALL' ? () => setLifecycleFilter('ALL') : selectedScenarioId ? () => onScenarioChange('') : onOpenAudits}>{lifecycleFilter !== 'ALL' ? 'Ver todas as etapas' : selectedScenarioId ? 'Limpar filtro' : 'Abrir auditorias'}</button></section>}
       {visibleNonconformities.map((nonconformity) => <article className="panel nonconformity-card" key={nonconformity.id}>
         <div className="nc-header"><div><span className="case-code">{nonconformity.code} · {nonconformity.test_case_code}</span><h2>{nonconformity.test_case_title}</h2><p>{nonconformity.description}</p></div><div className="nc-badges"><span className={`priority ${severityTone[nonconformity.severity]}`}>Prioridade {severityLabel[nonconformity.severity]}</span><span className={`status ${statusTone[nonconformity.status]}`}>{statusLabel[nonconformity.status]}</span></div></div>
         <p className="nc-meta">Responsável: {nonconformity.assignee_email} · Supervisor: {nonconformity.supervisor_email || 'não definido'}</p>
