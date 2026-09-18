@@ -91,9 +91,9 @@ def test_xlsx_export_groups_repeated_steps_and_uses_folder(client: TestClient) -
     assert imported.json()["scenarios"][0]["zephyr_folder"] == "Regressao/Conta"
     case = client.get("/test-cases").json()[0]
     assert case["responsible_email"] == "matheus@example.com"
-    assert case["steps"] == "1. Preencher formulario\n2. Enviar formulario"
+    assert case["steps"] == "Preencher formulario\nEnviar formulario"
     assert case["test_data"] == "nome valido"
-    assert case["expected_result"] == "1. Conta criada\n2. Confirmacao exibida"
+    assert case["expected_result"] == "Conta criada\nConfirmacao exibida"
 
 
 def test_xml_without_owner_uses_one_responsible_for_every_case(client: TestClient) -> None:

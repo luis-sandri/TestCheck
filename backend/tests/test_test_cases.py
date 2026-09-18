@@ -45,6 +45,7 @@ def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     assert created.status_code == 201
     assert created.json()["code"] == "TC-001"
     assert created.json()["responsible_email"] == "luis@example.com"
+    assert "approval_criteria" not in created.json()
 
     case_id = created.json()["id"]
     updated = client.put(
@@ -78,6 +79,7 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     assert audit.status_code == 201
     assert audit.json()["status"] == "DRAFT"
     items_by_code = {item["checklist_code"]: item for item in audit.json()["items"]}
+    assert set(items_by_code) == {"OBJECTIVE", "PRECONDITIONS", "STEPS", "TEST_DATA", "EXPECTED_RESULT"}
     assert items_by_code["STEPS"]["field_value"] == "1. Informar credenciais"
     assert items_by_code["EXPECTED_RESULT"]["field_value"] == "Acesso liberado"
     assert items_by_code["OBJECTIVE"]["field_value"] is None
@@ -96,9 +98,9 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     )
     assert review.status_code == 200
     assert review.json()["status"] == "COMPLETED"
-    assert review.json()["adherence_percentage"] == 33
-    assert review.json()["original_adherence_percentage"] == 33
-    assert review.json()["nonconformity_count"] == 4
+    assert review.json()["adherence_percentage"] == 40
+    assert review.json()["original_adherence_percentage"] == 40
+    assert review.json()["nonconformity_count"] == 3
     assert len(client.get("/audits").json()) == 1
 
     nonconformity = client.get("/nonconformities").json()[0]
@@ -118,8 +120,8 @@ def test_run_automated_audit_generates_nonconformities(client: TestClient) -> No
     assert reviewed.json()["status"] == "RESOLVED"
 
     refreshed_audit = client.get("/audits").json()[0]
-    assert refreshed_audit["adherence_percentage"] == 50
-    assert refreshed_audit["original_adherence_percentage"] == 33
+    assert refreshed_audit["adherence_percentage"] == 60
+    assert refreshed_audit["original_adherence_percentage"] == 40
 
 
 def test_numbering_and_data_are_scoped_by_scenario_and_organization(client: TestClient) -> None:

@@ -46,7 +46,6 @@ FIELD_ALIASES = {
         "resultado esperado",
         "test script (step-by-step) - expected result",
     ),
-    "approval_criteria": ("approval criteria", "acceptance criteria", "critério de aprovação", "criterio de aprovação"),
     "owner": ("owner", "responsible email", "assignee email", "responsável", "responsavel", "assignee"),
 }
 
@@ -153,11 +152,9 @@ def parse_zephyr_file(filename: str, raw_content: bytes) -> list[dict[str, str]]
     raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Envie um arquivo do Zephyr em .xlsx, .xml ou .csv.")
 
 
-def numbered_lines(values: list[str]) -> str:
+def joined_lines(values: list[str]) -> str:
     clean_values = [value.strip() for value in values if value.strip()]
-    if len(clean_values) <= 1:
-        return clean_values[0] if clean_values else ""
-    return "\n".join(f"{index}. {value}" for index, value in enumerate(clean_values, start=1))
+    return "\n".join(clean_values)
 
 
 def consolidate_cases(rows: list[dict[str, str]]) -> list[dict[str, str | list[str]]]:
@@ -182,7 +179,6 @@ def consolidate_cases(rows: list[dict[str, str]]) -> list[dict[str, str | list[s
                 "steps": [],
                 "test_data": [],
                 "expected_result": [],
-                "approval_criteria": value_from_row(normalized, "approval_criteria"),
                 "row_numbers": [str(index)],
             },
         )
@@ -190,7 +186,7 @@ def consolidate_cases(rows: list[dict[str, str]]) -> list[dict[str, str | list[s
             value = value_from_row(normalized, field)
             if value:
                 current[field].append(value)  # type: ignore[index]
-        for field in ("folder", "description", "preconditions", "owner", "approval_criteria"):
+        for field in ("folder", "description", "preconditions", "owner"):
             if not current[field] and value_from_row(normalized, field):
                 current[field] = value_from_row(normalized, field)
         if str(index) not in current["row_numbers"]:
@@ -198,9 +194,9 @@ def consolidate_cases(rows: list[dict[str, str]]) -> list[dict[str, str | list[s
 
     cases = []
     for case in grouped.values():
-        case["steps"] = numbered_lines(case["steps"])  # type: ignore[arg-type]
-        case["test_data"] = numbered_lines(case["test_data"])  # type: ignore[arg-type]
-        case["expected_result"] = numbered_lines(case["expected_result"])  # type: ignore[arg-type]
+        case["steps"] = joined_lines(case["steps"])  # type: ignore[arg-type]
+        case["test_data"] = joined_lines(case["test_data"])  # type: ignore[arg-type]
+        case["expected_result"] = joined_lines(case["expected_result"])  # type: ignore[arg-type]
         cases.append(case)
     return cases
 
@@ -298,7 +294,6 @@ async def import_zephyr_file(
             steps=str(case["steps"]),
             test_data=str(case["test_data"]),
             expected_result=str(case["expected_result"]),
-            approval_criteria=str(case["approval_criteria"]),
         )
         db.add(test_case)
         # A sessão do projeto não faz autoflush; persista o caso antes de

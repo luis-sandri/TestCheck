@@ -25,7 +25,6 @@ def serialize_case(test_case: TestCase) -> TestCaseOutput:
         steps=test_case.steps,
         test_data=test_case.test_data,
         expected_result=test_case.expected_result,
-        approval_criteria=test_case.approval_criteria,
         author_id=test_case.author_id,
         author_name=test_case.author.full_name,
         responsible_email=test_case.responsible_email or test_case.author.email,

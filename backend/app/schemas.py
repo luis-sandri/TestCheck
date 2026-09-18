@@ -106,7 +106,6 @@ class TestCaseInput(BaseModel):
     steps: str = Field(default="", max_length=20_000)
     test_data: str = Field(default="", max_length=10_000)
     expected_result: str = Field(default="", max_length=10_000)
-    approval_criteria: str = Field(default="", max_length=10_000)
 
     @field_validator(
         "title",
@@ -118,7 +117,6 @@ class TestCaseInput(BaseModel):
         "steps",
         "test_data",
         "expected_result",
-        "approval_criteria",
     )
     @classmethod
     def trim_text(cls, value: str) -> str:
@@ -143,7 +141,6 @@ class TestCaseOutput(BaseModel):
     steps: str | None
     test_data: str | None
     expected_result: str | None
-    approval_criteria: str | None
     author_id: str
     author_name: str
     responsible_email: str

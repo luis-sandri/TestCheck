@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react'
-import type { FormEvent, KeyboardEvent, MouseEvent } from 'react'
+import type { FormEvent, MouseEvent } from 'react'
 import './App.css'
 
 type ApiStatus = 'checking' | 'online' | 'offline'
@@ -10,7 +10,7 @@ type PublicOrganizationData = { id: string; name: string }
 type CurrentUser = { id: string; full_name: string; email: string; role: 'AUDITOR' | 'RESPONSIBLE' | 'ADMIN'; active_organization: OrganizationData | null; organizations: OrganizationData[] }
 type TestCaseData = {
   id: string; code: string; zephyr_key: string | null; title: string; description: string; preconditions: string; steps: string
-  test_data: string; expected_result: string; approval_criteria: string; author_name: string; responsible_email: string; reviewer_email: string; supervisor_email: string; scenario_id: string | null; scenario_name: string | null
+  test_data: string; expected_result: string; author_name: string; responsible_email: string; reviewer_email: string; supervisor_email: string; scenario_id: string | null; scenario_name: string | null
 }
 type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'zephyr_key' | 'author_name' | 'scenario_name'>
 type ScenarioData = { id: string; name: string; zephyr_folder: string; reviewer_email: string; supervisor_email: string; test_case_count: number; created_at: string }
@@ -29,7 +29,7 @@ type NonconformityData = {
 }
 
 const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
-  title: '', scenario_id: '', responsible_email: responsibleEmail, reviewer_email: responsibleEmail, supervisor_email: '', description: '', preconditions: '', steps: '', test_data: '', expected_result: '', approval_criteria: '',
+  title: '', scenario_id: '', responsible_email: responsibleEmail, reviewer_email: responsibleEmail, supervisor_email: '', description: '', preconditions: '', steps: '', test_data: '', expected_result: '',
 })
 const apiReadOptions = { credentials: 'include' as const, cache: 'no-store' as const }
 
@@ -347,30 +347,6 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Não foi possível importar o arquivo.') } finally { setImporting(false) }
   }
   const setField = (field: keyof TestCaseForm, value: string) => setForm((current) => ({ ...current, [field]: value }))
-  const nextStepNumber = (steps: string) => {
-    const numbers = [...steps.matchAll(/(?:^|\n)\s*(\d+)\.\s/g)].map((match) => Number(match[1]))
-    return Math.max(0, ...numbers) + 1
-  }
-  const startSteps = () => {
-    if (!form.steps.trim()) setField('steps', '1. ')
-  }
-  const addStep = () => {
-    setForm((current) => {
-      const steps = current.steps.trimEnd()
-      return { ...current, steps: steps ? `${steps}\n${nextStepNumber(steps)}. ` : '1. ' }
-    })
-  }
-  const handleStepKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== 'Enter' || event.shiftKey) return
-    event.preventDefault()
-    const target = event.currentTarget
-    const position = target.selectionStart
-    const before = target.value.slice(0, position)
-    const after = target.value.slice(target.selectionEnd)
-    const insertion = `\n${nextStepNumber(before)}. `
-    setField('steps', `${before}${insertion}${after}`)
-    window.requestAnimationFrame(() => target.setSelectionRange(position + insertion.length, position + insertion.length))
-  }
   const edit = (testCase: TestCaseData) => {
     const { id, code, zephyr_key, author_name, scenario_name, ...values } = testCase
     setEditingId(id)
@@ -417,7 +393,17 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     <section className="case-workspace list-only">
     {showCaseEditor && <div className="modal-backdrop" role="presentation"><form className="case-editor-modal case-form" onSubmit={save} role="dialog" aria-modal="true" aria-labelledby="case-editor-title">
       <div className="panel-header"><div><h2 id="case-editor-title">{editingId ? 'Editar caso de teste' : 'Novo caso de teste'}</h2><p>Campos em branco geram apenas uma sugestão; o revisor decide o resultado final.</p></div><button className="modal-close" type="button" aria-label="Fechar formulário" onClick={closeCaseEditor}>×</button></div>
-      <div className="form-fields"><label>Cenário <span className="field-hint">Opcional. Sem cenário, o caso é geral.</span><SiteSelect value={form.scenario_id || ''} onChange={(value) => setField('scenario_id', value)} ariaLabel="Cenário do caso de teste" options={[{ value: '', label: 'Geral (sem cenário)', description: 'Este caso não será associado a um cenário.' }, ...scenarios.map((scenario) => ({ value: scenario.id, label: scenario.name, description: `${scenario.test_case_count} caso(s) no cenário` }))]} /></label><label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label><label>Responsável pelo caso * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label>{form.scenario_id ? <p className="workflow-summary"><strong>Papéis definidos pelo cenário</strong><span>Revisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.reviewer_email || form.reviewer_email}</span><span>Supervisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.supervisor_email || form.supervisor_email}</span></p> : <><label>Revisor * <span className="field-hint">Define o resultado final da auditoria e valida correções.</span><input type="email" value={form.reviewer_email} onChange={(event) => setField('reviewer_email', event.target.value)} placeholder="revisor@exemplo.com" required /></label><label>Supervisor * <span className="field-hint">Decide quando uma NC for contestada ou escalada.</span><input type="email" value={form.supervisor_email} onChange={(event) => setField('supervisor_email', event.target.value)} placeholder="supervisor@exemplo.com" required /></label></>}<label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label><label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label><label>Passos de teste <span className="field-hint">Pressione Enter para numerar o próximo passo.</span><textarea className="steps-editor" value={form.steps} onFocus={startSteps} onKeyDown={handleStepKeyDown} onChange={(event) => setField('steps', event.target.value)} placeholder="1. Acessar a tela" /></label><button className="add-step-button" type="button" onClick={addStep}>＋ Adicionar passo</button><label>Dados de teste<textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="E-mail e senha utilizados" /></label><label>Resultado esperado<textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="O sistema deve liberar o acesso" /></label><label>Critério de aprovação<textarea value={form.approval_criteria} onChange={(event) => setField('approval_criteria', event.target.value)} placeholder="Acesso à página inicial sem mensagens de erro" /></label></div>
+      <div className="form-fields">
+        <label>Cenário <span className="field-hint">Opcional. Sem cenário, o caso é geral.</span><SiteSelect value={form.scenario_id || ''} onChange={(value) => setField('scenario_id', value)} ariaLabel="Cenário do caso de teste" options={[{ value: '', label: 'Geral (sem cenário)', description: 'Este caso não será associado a um cenário.' }, ...scenarios.map((scenario) => ({ value: scenario.id, label: scenario.name, description: `${scenario.test_case_count} caso(s) no cenário` }))]} /></label>
+        <label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label>
+        <label>Responsável pelo caso * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label>
+        {form.scenario_id ? <p className="workflow-summary"><strong>Papéis definidos pelo cenário</strong><span>Revisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.reviewer_email || form.reviewer_email}</span><span>Supervisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.supervisor_email || form.supervisor_email}</span></p> : <><label>Revisor * <span className="field-hint">Define o resultado final da auditoria e valida correções.</span><input type="email" value={form.reviewer_email} onChange={(event) => setField('reviewer_email', event.target.value)} placeholder="revisor@exemplo.com" required /></label><label>Supervisor * <span className="field-hint">Decide quando uma NC for contestada ou escalada.</span><input type="email" value={form.supervisor_email} onChange={(event) => setField('supervisor_email', event.target.value)} placeholder="supervisor@exemplo.com" required /></label></>}
+        <label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label>
+        <label>Pré-condições<textarea value={form.preconditions} onChange={(event) => setField('preconditions', event.target.value)} placeholder="Ex.: Usuário já cadastrado" /></label>
+        <label>Dado que <span className="field-hint">Descreva o contexto inicial do cenário, sem numeração.</span><textarea className="bdd-editor" value={form.steps} onChange={(event) => setField('steps', event.target.value)} placeholder="o usuário está na tela de login" /></label>
+        <label>Quando <span className="field-hint">Descreva a ação ou os dados informados.</span><textarea value={form.test_data} onChange={(event) => setField('test_data', event.target.value)} placeholder="informa credenciais válidas e seleciona Entrar" /></label>
+        <label>Então <span className="field-hint">Descreva o comportamento esperado.</span><textarea value={form.expected_result} onChange={(event) => setField('expected_result', event.target.value)} placeholder="o sistema libera o acesso à página inicial" /></label>
+      </div>
       <div className="form-actions"><button className="text-button" type="button" onClick={closeCaseEditor}>{editingId ? 'Cancelar edição' : 'Cancelar criação'}</button><button className="primary-button" disabled={saving} type="submit">{saving ? 'Salvando…' : editingId ? 'Salvar alterações' : 'Criar caso'}</button></div>
     </form></div>}
     <section className="panel case-list"><div className="panel-header"><div><h2>Casos cadastrados</h2><p>{loading ? 'Carregando…' : `${visibleCases.length} caso(s) no filtro atual.`}</p></div></div>

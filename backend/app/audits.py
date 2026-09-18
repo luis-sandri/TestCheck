@@ -36,12 +36,13 @@ router = APIRouter(prefix="/audits", tags=["Auditorias"])
 CHECKLIST = (
     ("OBJECTIVE", "Objetivo do teste", "description"),
     ("PRECONDITIONS", "Pré-condições", "preconditions"),
-    ("STEPS", "Passos de teste", "steps"),
-    ("TEST_DATA", "Dados de teste", "test_data"),
-    ("EXPECTED_RESULT", "Resultado esperado", "expected_result"),
-    ("APPROVAL_CRITERIA", "Critério de aprovação", "approval_criteria"),
+    ("STEPS", "Dado que", "steps"),
+    ("TEST_DATA", "Quando", "test_data"),
+    ("EXPECTED_RESULT", "Então", "expected_result"),
 )
 CHECKLIST_FIELD_BY_CODE = {code: field for code, _label, field in CHECKLIST}
+# Compatibilidade para auditorias já registradas antes da remoção do critério.
+CHECKLIST_FIELD_BY_CODE["APPROVAL_CRITERIA"] = "approval_criteria"
 
 def audit_query():
     return select(Audit).options(
