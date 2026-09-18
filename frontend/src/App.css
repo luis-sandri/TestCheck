@@ -388,7 +388,8 @@ main {
   font-weight: 800;
 }
 
-.audit-filter-actions .scenario-filter { min-width: 208px; }
+.audit-filter-actions { flex-wrap: nowrap; }
+.audit-filter-actions .scenario-filter { min-width: 0; width: 178px; flex: 1 1 0; }
 
 .lifecycle-filter-bar {
   display: grid;
@@ -2306,7 +2307,8 @@ textarea::placeholder {
   .topbar-actions > .secondary-button,
   .case-topbar-actions .secondary-button { width: 100%; justify-content: center; }
   .scenario-filter { width: 100%; }
-  .audit-filter-actions .scenario-filter { min-width: 0; }
+  .audit-filter-actions { flex-wrap: wrap; }
+  .audit-filter-actions .scenario-filter { min-width: 0; width: 100%; flex-basis: 100%; }
   .scenario-filter .select-trigger { min-height: 46px; }
   .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 26px 0 16px; }
   .metric-card { min-height: 122px; padding: 16px; border-radius: 12px; }
