@@ -98,6 +98,7 @@ class OrganizationSelectInput(OrganizationJoinInput):
 class TestCaseInput(BaseModel):
     title: str = Field(min_length=3, max_length=180)
     scenario_id: str | None = Field(default=None, max_length=36)
+    case_number: int | None = Field(default=None, ge=1, le=9_999)
     responsible_email: str = Field(default="", max_length=255)
     reviewer_email: str = Field(default="", max_length=255)
     supervisor_email: str = Field(default="", max_length=255)

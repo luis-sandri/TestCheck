@@ -12,7 +12,7 @@ type TestCaseData = {
   id: string; code: string; zephyr_key: string | null; title: string; description: string; preconditions: string; steps: string
   test_data: string; expected_result: string; author_name: string; responsible_email: string; reviewer_email: string; supervisor_email: string; scenario_id: string | null; scenario_name: string | null
 }
-type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'zephyr_key' | 'author_name' | 'scenario_name'>
+type TestCaseForm = Omit<TestCaseData, 'id' | 'code' | 'zephyr_key' | 'author_name' | 'scenario_name'> & { case_number: string }
 type ScenarioData = { id: string; name: string; zephyr_folder: string; reviewer_email: string; supervisor_email: string; test_case_count: number; created_at: string }
 type ZephyrImportResult = { imported_cases?: number; scenarios?: ScenarioData[]; detail?: string }
 type SiteSelectOption = { value: string; label: string; description?: string }
@@ -29,7 +29,7 @@ type NonconformityData = {
 }
 
 const blankTestCase = (responsibleEmail = ''): TestCaseForm => ({
-  title: '', scenario_id: '', responsible_email: responsibleEmail, reviewer_email: responsibleEmail, supervisor_email: '', description: '', preconditions: '', steps: '', test_data: '', expected_result: '',
+  title: '', scenario_id: '', case_number: '', responsible_email: responsibleEmail, reviewer_email: responsibleEmail, supervisor_email: '', description: '', preconditions: '', steps: '', test_data: '', expected_result: '',
 })
 const apiReadOptions = { credentials: 'include' as const, cache: 'no-store' as const }
 
@@ -348,9 +348,9 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
   }
   const setField = (field: keyof TestCaseForm, value: string) => setForm((current) => ({ ...current, [field]: value }))
   const edit = (testCase: TestCaseData) => {
-    const { id, code, zephyr_key, author_name, scenario_name, ...values } = testCase
+    const { id, code, zephyr_key: _zephyrKey, author_name: _authorName, scenario_name: _scenarioName, ...values } = testCase
     setEditingId(id)
-    setForm({ ...values, scenario_id: values.scenario_id || '' })
+    setForm({ ...values, scenario_id: values.scenario_id || '', case_number: code.match(/^TC-(\d+)$/)?.[1] || '' })
     setShowCaseEditor(true)
   }
   const reset = () => { setEditingId(null); setForm(blankTestCase(user.email)); setMessage('') }
@@ -371,7 +371,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
     setMessage('')
     try {
       const response = await fetch(editingId ? `/api/test-cases/${editingId}` : '/api/test-cases', {
-        method: editingId ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, scenario_id: form.scenario_id || null }),
+        method: editingId ? 'PUT' : 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...form, case_number: form.case_number ? Number(form.case_number) : null, scenario_id: form.scenario_id || null }),
       })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.detail || 'Não foi possível salvar.')
@@ -396,6 +396,7 @@ function TestCasesPage({ apiStatus, user, selectedScenarioId, onScenarioChange, 
       <div className="form-fields">
         <label>Cenário <span className="field-hint">Opcional. Sem cenário, o caso é geral.</span><SiteSelect value={form.scenario_id || ''} onChange={(value) => setField('scenario_id', value)} ariaLabel="Cenário do caso de teste" options={[{ value: '', label: 'Geral (sem cenário)', description: 'Este caso não será associado a um cenário.' }, ...scenarios.map((scenario) => ({ value: scenario.id, label: scenario.name, description: `${scenario.test_case_count} caso(s) no cenário` }))]} /></label>
         <label>Título *<input value={form.title} onChange={(event) => setField('title', event.target.value)} placeholder="Ex.: Login com credenciais válidas" minLength={3} required /></label>
+        <label>Número do caso <span className="field-hint">Opcional. Deixe vazio para gerar automaticamente, como TC-01.</span><input type="number" min="1" max="9999" inputMode="numeric" value={form.case_number} onChange={(event) => setField('case_number', event.target.value)} placeholder="Automático" /></label>
         <label>Responsável pelo caso * <span className="field-hint">Receberá a NC automaticamente, se houver.</span><input type="email" value={form.responsible_email} onChange={(event) => setField('responsible_email', event.target.value)} placeholder="responsavel@exemplo.com" required /></label>
         {form.scenario_id ? <p className="workflow-summary"><strong>Papéis definidos pelo cenário</strong><span>Revisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.reviewer_email || form.reviewer_email}</span><span>Supervisor: {scenarios.find((scenario) => scenario.id === form.scenario_id)?.supervisor_email || form.supervisor_email}</span></p> : <><label>Revisor * <span className="field-hint">Define o resultado final da auditoria e valida correções.</span><input type="email" value={form.reviewer_email} onChange={(event) => setField('reviewer_email', event.target.value)} placeholder="revisor@exemplo.com" required /></label><label>Supervisor * <span className="field-hint">Decide quando uma NC for contestada ou escalada.</span><input type="email" value={form.supervisor_email} onChange={(event) => setField('supervisor_email', event.target.value)} placeholder="supervisor@exemplo.com" required /></label></>}
         <label>Objetivo<textarea value={form.description} onChange={(event) => setField('description', event.target.value)} placeholder="O que este caso valida?" /></label>

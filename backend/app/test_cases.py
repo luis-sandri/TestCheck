@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
@@ -12,6 +14,7 @@ from .schemas import TestCaseInput, TestCaseOutput
 
 
 router = APIRouter(prefix="/test-cases", tags=["Casos de teste"])
+CASE_CODE_PATTERN = re.compile(r"^TC-(\d+)$")
 
 
 def serialize_case(test_case: TestCase) -> TestCaseOutput:
@@ -66,8 +69,38 @@ def next_code(db: Session, organization_id: str, scenario_id: str | None) -> str
     statement = select(TestCase.code).where(TestCase.organization_id == organization_id)
     statement = statement.where(TestCase.scenario_id == scenario_id) if scenario_id else statement.where(TestCase.scenario_id.is_(None))
     codes = db.scalars(statement).all()
-    used_numbers = [int(code.removeprefix("TC-")) for code in codes if code.startswith("TC-") and code[3:].isdigit()]
-    return f"TC-{(max(used_numbers, default=0) + 1):03d}"
+    used_numbers = [case_number_from_code(code) for code in codes]
+    return code_for_number(max((number for number in used_numbers if number is not None), default=0) + 1)
+
+
+def case_number_from_code(code: str) -> int | None:
+    match = CASE_CODE_PATTERN.fullmatch(code)
+    return int(match.group(1)) if match else None
+
+
+def code_for_number(number: int) -> str:
+    return f"TC-{number:02d}"
+
+
+def code_for_requested_number(
+    db: Session,
+    organization_id: str,
+    scenario_id: str | None,
+    requested_number: int | None,
+    current_case_id: str | None = None,
+) -> str:
+    if requested_number is None:
+        return next_code(db, organization_id, scenario_id)
+
+    statement = select(TestCase.id, TestCase.code).where(TestCase.organization_id == organization_id)
+    statement = statement.where(TestCase.scenario_id == scenario_id) if scenario_id else statement.where(TestCase.scenario_id.is_(None))
+    for case_id, code in db.execute(statement):
+        if case_id != current_case_id and case_number_from_code(code) == requested_number:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Já existe um caso TC-{requested_number:02d} neste cenário.",
+            )
+    return code_for_number(requested_number)
 
 
 def apply_workflow_roles(values: dict[str, str | None], scenario: Scenario | None, author: User) -> None:
@@ -112,7 +145,7 @@ def create_test_case(
     current_user: User = Depends(get_current_user),
     organization: Organization = Depends(get_current_organization),
 ) -> TestCaseOutput:
-    values = payload.model_dump()
+    values = payload.model_dump(exclude={"case_number"})
     scenario = None
     if values["scenario_id"]:
         scenario = db.scalar(select(Scenario).where(Scenario.id == values["scenario_id"], Scenario.organization_id == organization.id))
@@ -120,7 +153,7 @@ def create_test_case(
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cenário não encontrado.")
     apply_workflow_roles(values, scenario, current_user)
     test_case = TestCase(
-        code=next_code(db, organization.id, values["scenario_id"]),
+        code=code_for_requested_number(db, organization.id, values["scenario_id"], payload.case_number),
         organization_id=organization.id,
         author_id=current_user.id,
         **values,
@@ -151,7 +184,7 @@ def update_test_case(
 ) -> TestCaseOutput:
     test_case = get_case_or_404(case_id, organization.id, db)
     ensure_can_edit(test_case, current_user)
-    values = payload.model_dump()
+    values = payload.model_dump(exclude={"case_number"})
     scenario = None
     if values["scenario_id"]:
         scenario = db.scalar(select(Scenario).where(Scenario.id == values["scenario_id"], Scenario.organization_id == organization.id))
@@ -160,7 +193,11 @@ def update_test_case(
     if not values["responsible_email"]:
         values["responsible_email"] = test_case.responsible_email or test_case.author.email
     apply_workflow_roles(values, scenario, test_case.author)
-    if test_case.scenario_id != values["scenario_id"]:
+    if payload.case_number is not None:
+        test_case.code = code_for_requested_number(
+            db, organization.id, values["scenario_id"], payload.case_number, test_case.id
+        )
+    elif test_case.scenario_id != values["scenario_id"]:
         test_case.code = next_code(db, organization.id, values["scenario_id"])
     for field, value in values.items():
         setattr(test_case, field, value)

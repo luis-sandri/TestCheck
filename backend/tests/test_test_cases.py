@@ -43,18 +43,24 @@ def test_create_update_list_and_delete_test_case(client: TestClient) -> None:
     authenticate(client)
     created = client.post("/test-cases", json={"title": "Login válido", "steps": "1. Informar credenciais", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
     assert created.status_code == 201
-    assert created.json()["code"] == "TC-001"
+    assert created.json()["code"] == "TC-01"
     assert created.json()["responsible_email"] == "luis@example.com"
     assert "approval_criteria" not in created.json()
 
     case_id = created.json()["id"]
     updated = client.put(
         f"/test-cases/{case_id}",
-        json={"title": "Login válido", "steps": "1. Informar credenciais", "expected_result": "Acesso liberado", "responsible_email": "andre@example.com", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"},
+        json={"title": "Login válido", "case_number": 7, "steps": "1. Informar credenciais", "expected_result": "Acesso liberado", "responsible_email": "andre@example.com", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"},
     )
     assert updated.status_code == 200
+    assert updated.json()["code"] == "TC-07"
     assert updated.json()["expected_result"] == "Acesso liberado"
     assert updated.json()["responsible_email"] == "andre@example.com"
+    duplicate_number = client.post(
+        "/test-cases",
+        json={"title": "Outro caso", "case_number": 7, "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"},
+    )
+    assert duplicate_number.status_code == 409
     listed = client.get("/test-cases")
     assert listed.headers["cache-control"] == "no-store, max-age=0"
     assert len(listed.json()) == 1
@@ -128,15 +134,15 @@ def test_numbering_and_data_are_scoped_by_scenario_and_organization(client: Test
     authenticate(client)
     general_one = client.post("/test-cases", json={"title": "Geral 1", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
     general_two = client.post("/test-cases", json={"title": "Geral 2", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
-    assert general_one.json()["code"] == "TC-001"
-    assert general_two.json()["code"] == "TC-002"
+    assert general_one.json()["code"] == "TC-01"
+    assert general_two.json()["code"] == "TC-02"
 
     second_user = TestClient(app)
     registration = second_user.post("/auth/register", json={"full_name": "André Murilo", "email": "andre@example.com", "password": "senha-segura-123", "organization_name": "Outra Equipe"})
     assert registration.status_code == 201
     isolated_case = second_user.post("/test-cases", json={"title": "Caso isolado", "reviewer_email": "revisor@example.com", "supervisor_email": "supervisor@example.com"})
     assert isolated_case.status_code == 201
-    assert isolated_case.json()["code"] == "TC-001"
+    assert isolated_case.json()["code"] == "TC-01"
     assert len(client.get("/test-cases").json()) == 2
     assert len(second_user.get("/test-cases").json()) == 1
     second_user.close()

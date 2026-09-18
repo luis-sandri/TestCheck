@@ -138,9 +138,9 @@ def test_import_accepts_multiple_files_and_keeps_case_numbers_per_folder(client:
     assert imported.json()["imported_cases"] == 3
     assert len(imported.json()["scenarios"]) == 2
     cases = {case["title"]: case for case in client.get("/test-cases").json()}
-    assert cases["Login"]["code"] == "TC-001"
-    assert cases["Cadastro"]["code"] == "TC-001"
-    assert cases["Consulta"]["code"] == "TC-002"
+    assert cases["Login"]["code"] == "TC-01"
+    assert cases["Cadastro"]["code"] == "TC-01"
+    assert cases["Consulta"]["code"] == "TC-02"
     assert {case["responsible_email"] for case in cases.values()} == {"gustavo@example.com"}
 
 
@@ -184,7 +184,7 @@ def test_bulk_import_and_manual_edit_keep_numbering_independent_per_scenario(cli
         json={"title": "Recuperar senha", "scenario_id": login_scenario["id"]},
     )
     assert manual_in_scenario.status_code == 201
-    assert manual_in_scenario.json()["code"] == "TC-003"
+    assert manual_in_scenario.json()["code"] == "TC-03"
     assert manual_in_scenario.json()["reviewer_email"] == "revisor@example.com"
     assert manual_in_scenario.json()["supervisor_email"] == "supervisor@example.com"
 
@@ -197,7 +197,7 @@ def test_bulk_import_and_manual_edit_keep_numbering_independent_per_scenario(cli
         },
     )
     assert general_case.status_code == 201
-    assert general_case.json()["code"] == "TC-001"
+    assert general_case.json()["code"] == "TC-01"
     assert general_case.json()["scenario_id"] is None
 
     moved_case = client.put(
@@ -205,7 +205,7 @@ def test_bulk_import_and_manual_edit_keep_numbering_independent_per_scenario(cli
         json={"title": "Caso geral", "scenario_id": login_scenario["id"]},
     )
     assert moved_case.status_code == 200
-    assert moved_case.json()["code"] == "TC-004"
+    assert moved_case.json()["code"] == "TC-04"
     assert moved_case.json()["scenario_id"] == login_scenario["id"]
 
 
@@ -237,7 +237,7 @@ def test_organization_switching_isolates_imported_and_manual_data(client: TestCl
         },
     )
     assert case_from_b.status_code == 201
-    assert case_from_b.json()["code"] == "TC-001"
+    assert case_from_b.json()["code"] == "TC-01"
 
     switched_back = client.post("/organizations/select", json={"organization_id": organization_a})
     assert switched_back.status_code == 200
